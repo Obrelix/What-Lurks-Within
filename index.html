@@ -1643,6 +1643,95 @@
     }
 
     // ═══════════════════════════════════════════
+    // STATE MANAGEMENT
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Resets all mutable state, revokes object URLs, cancels animations.
+     */
+    function resetState() {
+      if (APP_STATE.animationFrameId) {
+        cancelAnimationFrame(APP_STATE.animationFrameId);
+        APP_STATE.animationFrameId = null;
+      }
+      if (APP_STATE.sourceObjectURL) {
+        URL.revokeObjectURL(APP_STATE.sourceObjectURL);
+        APP_STATE.sourceObjectURL = null;
+      }
+      if (APP_STATE.targetObjectURL) {
+        URL.revokeObjectURL(APP_STATE.targetObjectURL);
+        APP_STATE.targetObjectURL = null;
+      }
+
+      APP_STATE.sourceBuffer = null;
+      APP_STATE.targetBuffer = null;
+      APP_STATE.mapping = null;
+      APP_STATE.sourceXY = null;
+      APP_STATE.targetXY = null;
+      APP_STATE.colors = null;
+      APP_STATE.startTimes = null;
+      APP_STATE.animationStartTime = null;
+      APP_STATE.animBatchIndex = 0;
+      APP_STATE.animSettled = 0;
+      APP_STATE.animLastBatchTime = 0;
+
+      // Reset UI
+      var preview = document.getElementById('source-preview');
+      if (preview) { preview.src = ''; preview.classList.add('hidden'); }
+      var tgtPreview = document.getElementById('target-preview');
+      if (tgtPreview) { tgtPreview.src = ''; tgtPreview.classList.add('hidden'); }
+      var revealBtn = document.getElementById('btn-reveal');
+      if (revealBtn) revealBtn.disabled = true;
+    }
+
+    /**
+     * @description Downloads the result canvas as a PNG.
+     */
+    function downloadResult() {
+      var canvas = document.getElementById('result-canvas');
+      if (!canvas) {
+        showToast('No result canvas found.', 'error');
+        return;
+      }
+      try {
+        canvas.toBlob(function(blob) {
+          if (!blob) {
+            showToast('Failed to create image blob.', 'error');
+            return;
+          }
+          var url = URL.createObjectURL(blob);
+          var a = document.createElement('a');
+          a.href = url;
+          a.download = 'what-lurks-within-' + Date.now() + '.png';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 'image/png');
+      } catch (err) {
+        showToast('Download failed: ' + err.message, 'error');
+      }
+    }
+
+    /**
+     * @description Cycles to the next animation pattern and re-runs the reveal.
+     */
+    function tryAnotherPattern() {
+      var patterns = ['spatial_sweep', 'random_scatter', 'luminance_ordered', 'spiral'];
+      var idx = patterns.indexOf(APP_STATE.selectedPattern);
+      APP_STATE.selectedPattern = patterns[(idx + 1) % patterns.length];
+
+      // Cancel current animation if running
+      if (APP_STATE.animationFrameId) {
+        cancelAnimationFrame(APP_STATE.animationFrameId);
+        APP_STATE.animationFrameId = null;
+      }
+
+      // Re-run with same buffers but new pattern
+      startReveal();
+    }
+
+    // ═══════════════════════════════════════════
     // EVENT LISTENERS
     // ═══════════════════════════════════════════
 
@@ -1750,6 +1839,19 @@
           }
         });
       });
+
+      // ─── Result screen buttons ───
+      var btnDownload = document.getElementById('btn-download');
+      btnDownload?.addEventListener('click', downloadResult);
+
+      var btnRetry = document.getElementById('btn-retry');
+      btnRetry?.addEventListener('click', tryAnotherPattern);
+
+      var btnStartOver = document.getElementById('btn-start-over');
+      btnStartOver?.addEventListener('click', function() {
+        resetState();
+        showScreen('landing');
+      });
     }
 
     // ═══════════════════════════════════════════
@@ -1849,6 +1951,102 @@
       };
     }
     VALIDATIONS.push(validate_phase1_configExists);
+
+    // ─── Phase 5 Validations ───
+
+    /**
+     * @description Validates that all CONFIG keys referenced in the codebase exist.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase5_configComplete() {
+      var expectedKeys = [
+        'COLOR_BG_PRIMARY', 'COLOR_BG_SECONDARY', 'COLOR_TEXT_PRIMARY',
+        'COLOR_TEXT_ACCENT', 'COLOR_GLITCH_R', 'COLOR_GLITCH_C', 'COLOR_DANGER',
+        'RESOLUTION_LOW', 'RESOLUTION_MID', 'RESOLUTION_HIGH', 'DEFAULT_RESOLUTION',
+        'NOISE_SCALE', 'NOISE_FPS',
+        'BATCH_PERCENT', 'BATCH_INTERVAL_MS', 'TWEEN_DURATION_MS',
+        'ARC_MAGNITUDE', 'COMPLETION_DELAY_MS',
+        'LUMINANCE_BAND_WIDTH',
+        'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS', 'PROCEDURAL_TARGET_COUNT'
+      ];
+      var missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
+      var wrongType = expectedKeys.filter(function(k) {
+        if (!(k in CONFIG)) return false;
+        if (k.startsWith('COLOR_')) return typeof CONFIG[k] !== 'string';
+        return typeof CONFIG[k] !== 'number';
+      });
+      var pass = missing.length === 0 && wrongType.length === 0;
+      return {
+        pass: pass,
+        name: 'phase5_configComplete',
+        detail: pass
+          ? 'All ' + expectedKeys.length + ' CONFIG keys present with correct types'
+          : 'missing=[' + missing.join(',') + '] wrongType=[' + wrongType.join(',') + ']'
+      };
+    }
+    VALIDATIONS.push(validate_phase5_configComplete);
+
+    /**
+     * @description Validates resetState clears all buffer and mapping state.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase5_stateReset() {
+      // Save current state
+      var savedSrc = APP_STATE.sourceBuffer;
+      var savedTgt = APP_STATE.targetBuffer;
+      var savedMap = APP_STATE.mapping;
+
+      // Set dummy state
+      APP_STATE.sourceBuffer = { dummy: true };
+      APP_STATE.targetBuffer = { dummy: true };
+      APP_STATE.mapping = [1, 2, 3];
+
+      resetState();
+
+      var pass = APP_STATE.sourceBuffer === null &&
+                 APP_STATE.targetBuffer === null &&
+                 APP_STATE.mapping === null;
+
+      // Restore (already null from reset, but just in case)
+      APP_STATE.sourceBuffer = savedSrc;
+      APP_STATE.targetBuffer = savedTgt;
+      APP_STATE.mapping = savedMap;
+
+      return {
+        pass: pass,
+        name: 'phase5_stateReset',
+        detail: pass
+          ? 'resetState() nulls sourceBuffer, targetBuffer, mapping'
+          : 'Some state not null after resetState()'
+      };
+    }
+    VALIDATIONS.push(validate_phase5_stateReset);
+
+    /**
+     * @description Meta-test: runs all validations and confirms all pass.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase5_allValidationsPass() {
+      var failures = [];
+      VALIDATIONS.forEach(function(fn) {
+        if (fn === validate_phase5_allValidationsPass) return; // Skip self
+        try {
+          var result = fn();
+          if (!result.pass) failures.push(result.name);
+        } catch (err) {
+          failures.push(fn.name + '(error)');
+        }
+      });
+      var pass = failures.length === 0;
+      return {
+        pass: pass,
+        name: 'phase5_allValidationsPass',
+        detail: pass
+          ? 'All validations pass'
+          : 'Failing: ' + failures.join(', ')
+      };
+    }
+    VALIDATIONS.push(validate_phase5_allValidationsPass);
 
     // ─── Phase 4 Validations ───
 
