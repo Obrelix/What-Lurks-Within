@@ -854,18 +854,424 @@
     }
 
     // ═══════════════════════════════════════════
-    // EVENT LISTENERS (Phase 1 stubs)
+    // IMAGE PIPELINE
     // ═══════════════════════════════════════════
 
     /**
-     * @description Binds all Phase 1 UI event listeners.
+     * @description Computes cover-crop source rectangle for drawImage.
+     * @param {number} srcW - Source image width
+     * @param {number} srcH - Source image height
+     * @param {number} dst - Target square dimension
+     * @returns {{ sx: number, sy: number, sw: number, sh: number }}
      */
-    function initPhase1Events() {
+    function computeCoverCrop(srcW, srcH, dst) {
+      const aspect = srcW / srcH;
+      let sx, sy, sw, sh;
+      if (aspect > 1) {
+        // Landscape — crop sides
+        sh = srcH;
+        sw = srcH;
+        sx = Math.floor((srcW - sw) / 2);
+        sy = 0;
+      } else {
+        // Portrait or square — crop top/bottom
+        sw = srcW;
+        sh = srcW;
+        sx = 0;
+        sy = Math.floor((srcH - sh) / 2);
+      }
+      return { sx: sx, sy: sy, sw: sw, sh: sh };
+    }
+
+    /**
+     * @description Creates a PixelBuffer from an Image element at the given resolution.
+     * @param {HTMLImageElement} img - Loaded image
+     * @param {number} size - Target square dimension (256/512/768)
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function createPixelBuffer(img, size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D context not available');
+
+      const crop = computeCoverCrop(img.naturalWidth || img.width, img.naturalHeight || img.height, size);
+      ctx.drawImage(img, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, size, size);
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      return {
+        width: size,
+        height: size,
+        data: imageData.data,
+        count: size * size
+      };
+    }
+
+    /**
+     * @description Creates a PixelBuffer from raw Uint8ClampedArray data.
+     * @param {Uint8ClampedArray} data - Raw RGBA pixel data
+     * @param {number} width - Image width
+     * @param {number} height - Image height
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function createPixelBufferFromData(data, width, height) {
+      return {
+        width: width,
+        height: height,
+        data: data,
+        count: width * height
+      };
+    }
+
+    /**
+     * @description Loads an image file and returns a Promise resolving to an HTMLImageElement.
+     * @param {File} file - Image file
+     * @returns {Promise<HTMLImageElement>}
+     */
+    function loadImageFromFile(file) {
+      return new Promise(function(resolve, reject) {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = function() { resolve(img); };
+        img.onerror = function() {
+          URL.revokeObjectURL(url);
+          reject(new Error('Failed to load image'));
+        };
+        img.src = url;
+        // Store URL for later revocation
+        img._objectURL = url;
+      });
+    }
+
+    /**
+     * @description Handles source image upload — creates preview and PixelBuffer.
+     * @param {File} file - Image file from input
+     */
+    async function handleSourceUpload(file) {
+      if (!file) return;
+      if (file.size > CONFIG.MAX_FILE_SIZE_BYTES) {
+        showToast('File is over 10 MB — processing may be slow.', 'info');
+      }
+      try {
+        const img = await loadImageFromFile(file);
+
+        // Show preview
+        const preview = document.getElementById('source-preview');
+        if (preview) {
+          if (APP_STATE.sourceObjectURL) URL.revokeObjectURL(APP_STATE.sourceObjectURL);
+          APP_STATE.sourceObjectURL = img._objectURL;
+          preview.src = img._objectURL;
+          preview.classList.remove('hidden');
+        }
+
+        // Check for upscaling
+        const res = APP_STATE.selectedResolution;
+        if ((img.naturalWidth || img.width) < res || (img.naturalHeight || img.height) < res) {
+          showToast('Image is smaller than target resolution — upscaling may reduce quality.', 'info');
+        }
+
+        APP_STATE.sourceBuffer = createPixelBuffer(img, res);
+        showScreen('setup');
+        updateRevealButton();
+      } catch (err) {
+        showToast('Error loading image: ' + err.message, 'error');
+      }
+    }
+
+    /**
+     * @description Handles target image upload — creates preview and PixelBuffer.
+     * @param {File} file - Image file from input
+     */
+    async function handleTargetUpload(file) {
+      if (!file) return;
+      if (file.size > CONFIG.MAX_FILE_SIZE_BYTES) {
+        showToast('File is over 10 MB — processing may be slow.', 'info');
+      }
+      try {
+        const img = await loadImageFromFile(file);
+
+        // Show preview
+        const preview = document.getElementById('target-preview');
+        if (preview) {
+          if (APP_STATE.targetObjectURL) URL.revokeObjectURL(APP_STATE.targetObjectURL);
+          APP_STATE.targetObjectURL = img._objectURL;
+          preview.src = img._objectURL;
+          preview.classList.remove('hidden');
+        }
+
+        APP_STATE.targetBuffer = createPixelBuffer(img, APP_STATE.selectedResolution);
+        updateRevealButton();
+      } catch (err) {
+        showToast('Error loading target image: ' + err.message, 'error');
+      }
+    }
+
+    /**
+     * @description Enables or disables the Reveal button based on buffer state.
+     */
+    function updateRevealButton() {
+      const btn = document.getElementById('btn-reveal');
+      if (!btn) return;
+      const hasSource = APP_STATE.sourceBuffer !== null;
+      const hasTarget = APP_STATE.targetBuffer !== null || APP_STATE.targetMode === 'fate';
+      btn.disabled = !(hasSource && hasTarget);
+    }
+
+    // ═══════════════════════════════════════════
+    // PROCEDURAL TARGET GENERATORS
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Generates a concentric circles pattern.
+     * @param {number} size - Square dimension
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function generateCircles(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D not available');
+
+      const cx = size / 2;
+      const cy = size / 2;
+      const ringWidth = Math.max(1, Math.floor(size / 16));
+
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const dist = Math.sqrt((x - cx) * (x - cx) + (y - cy) * (y - cy));
+          const ring = Math.floor(dist / ringWidth);
+          const bright = ring % 2 === 0 ? 200 : 40;
+          ctx.fillStyle = 'rgb(' + bright + ',' + bright + ',' + (bright + 20) + ')';
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      return createPixelBufferFromData(imageData.data, size, size);
+    }
+
+    /**
+     * @description Generates a diagonal gradient pattern.
+     * @param {number} size - Square dimension
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function generateDiagonalGradient(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D not available');
+
+      const maxDist = (size - 1) * 2;
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const t = (x + y) / maxDist;
+          const r = Math.floor(t * 180 + 30);
+          const g = Math.floor(t * 80 + 10);
+          const b = Math.floor(t * 200 + 40);
+          ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      return createPixelBufferFromData(imageData.data, size, size);
+    }
+
+    /**
+     * @description Generates a checkerboard pattern.
+     * @param {number} size - Square dimension
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function generateCheckerboard(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D not available');
+
+      const cellSize = Math.max(1, Math.floor(size / 8));
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const cx = Math.floor(x / cellSize);
+          const cy = Math.floor(y / cellSize);
+          const bright = (cx + cy) % 2 === 0 ? 220 : 20;
+          ctx.fillStyle = 'rgb(' + bright + ',' + bright + ',' + bright + ')';
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      return createPixelBufferFromData(imageData.data, size, size);
+    }
+
+    /**
+     * @description Generates an Archimedean spiral pattern.
+     * @param {number} size - Square dimension
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function generateSpiral(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D not available');
+
+      ctx.fillStyle = '#0a0a0c';
+      ctx.fillRect(0, 0, size, size);
+
+      const cx = size / 2;
+      const cy = size / 2;
+      const maxRadius = size * 0.48;
+      const turns = 8;
+      const totalSteps = Math.floor(size * turns * 2);
+
+      ctx.strokeStyle = '#c0c0d0';
+      ctx.lineWidth = Math.max(1, size / 128);
+      ctx.beginPath();
+
+      for (let i = 0; i <= totalSteps; i++) {
+        const t = i / totalSteps;
+        const angle = t * turns * 2 * Math.PI;
+        const r = t * maxRadius;
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      return createPixelBufferFromData(imageData.data, size, size);
+    }
+
+    /**
+     * @description Generates a radial burst pattern.
+     * @param {number} size - Square dimension
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function generateRadialBurst(size) {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2D not available');
+
+      ctx.fillStyle = '#0a0a0c';
+      ctx.fillRect(0, 0, size, size);
+
+      const cx = size / 2;
+      const cy = size / 2;
+      const rays = 24;
+      const maxR = size * 0.7;
+
+      for (let i = 0; i < rays; i++) {
+        const angle = (i / rays) * 2 * Math.PI;
+        const bright = 140 + Math.floor(Math.random() * 80);
+        ctx.strokeStyle = 'rgb(' + bright + ',' + (bright - 40) + ',' + (bright + 20) + ')';
+        ctx.lineWidth = Math.max(1, size / 64);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + maxR * Math.cos(angle), cy + maxR * Math.sin(angle));
+        ctx.stroke();
+      }
+
+      const imageData = ctx.getImageData(0, 0, size, size);
+      return createPixelBufferFromData(imageData.data, size, size);
+    }
+
+    /**
+     * @description Array of procedural target generators.
+     * @type {Array<{ name: string, fn: function(number): object }>}
+     */
+    const PROCEDURAL_GENERATORS = [
+      { name: 'Concentric Circles', fn: generateCircles },
+      { name: 'Diagonal Gradient', fn: generateDiagonalGradient },
+      { name: 'Checkerboard', fn: generateCheckerboard },
+      { name: 'Spiral', fn: generateSpiral },
+      { name: 'Radial Burst', fn: generateRadialBurst }
+    ];
+
+    /**
+     * @description Generates a random procedural target at the given resolution.
+     * @param {number} size - Square dimension
+     * @returns {{ width: number, height: number, data: Uint8ClampedArray, count: number }}
+     */
+    function generateRandomTarget(size) {
+      const idx = Math.floor(Math.random() * PROCEDURAL_GENERATORS.length);
+      return PROCEDURAL_GENERATORS[idx].fn(size);
+    }
+
+    // ═══════════════════════════════════════════
+    // EVENT LISTENERS
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Binds all UI event listeners.
+     */
+    function initEvents() {
       // Upload button triggers file input
       const btnUpload = document.getElementById('btn-upload');
       const sourceInput = document.getElementById('source-file-input');
       btnUpload?.addEventListener('click', function() {
         sourceInput?.click();
+      });
+
+      // Source file selected (from landing)
+      sourceInput?.addEventListener('change', function(e) {
+        const file = e.target?.files?.[0];
+        if (file) handleSourceUpload(file);
+      });
+
+      // Change source photo (from setup screen)
+      const changeSourceInput = document.getElementById('change-source-input');
+      changeSourceInput?.addEventListener('change', function(e) {
+        const file = e.target?.files?.[0];
+        if (file) handleSourceUpload(file);
+      });
+
+      // Target file selected
+      const targetInput = document.getElementById('target-file-input');
+      targetInput?.addEventListener('change', function(e) {
+        const file = e.target?.files?.[0];
+        if (file) handleTargetUpload(file);
+      });
+
+      // Reveal button
+      const btnReveal = document.getElementById('btn-reveal');
+      btnReveal?.addEventListener('click', function() {
+        if (!APP_STATE.sourceBuffer) return;
+        // Generate procedural target if fate mode
+        if (APP_STATE.targetMode === 'fate') {
+          APP_STATE.targetBuffer = generateRandomTarget(APP_STATE.selectedResolution);
+        }
+        if (!APP_STATE.targetBuffer) {
+          showToast('No target image available.', 'error');
+          return;
+        }
+        // Proceed to animation (Phase 3+4 will handle mapping + animation)
+        if (typeof startReveal === 'function') {
+          startReveal();
+        } else {
+          showToast('Animation engine not yet implemented.', 'info');
+        }
+      });
+
+      // Drag and drop
+      document.addEventListener('dragover', function(e) { e.preventDefault(); });
+      document.addEventListener('drop', function(e) {
+        e.preventDefault();
+        const file = e.dataTransfer?.files?.[0];
+        if (!file || !file.type.startsWith('image/')) return;
+        if (APP_STATE.currentScreen === 'landing' || APP_STATE.currentScreen === 'setup') {
+          if (!APP_STATE.sourceBuffer) {
+            handleSourceUpload(file);
+          } else if (APP_STATE.targetMode === 'custom' && !APP_STATE.targetBuffer) {
+            handleTargetUpload(file);
+          }
+        }
       });
 
       // How It Works modal
@@ -923,7 +1329,7 @@
     function init() {
       showScreen('landing');
       initNoiseCanvas();
-      initPhase1Events();
+      initEvents();
 
       // Run validation suite if in test mode
       if (TESTING) {
@@ -1010,6 +1416,82 @@
       };
     }
     VALIDATIONS.push(validate_phase1_configExists);
+
+    // ─── Phase 2 Validations ───
+
+    /**
+     * @description Validates PixelBuffer shape for a known 4x4 image.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase2_pixelBufferShape() {
+      const data = new Uint8ClampedArray(4 * 4 * 4); // 16 pixels, RGBA
+      const buf = createPixelBufferFromData(data, 4, 4);
+      const pass = buf.width === 4 && buf.height === 4 && buf.count === 16 && buf.data.length === 64;
+      return {
+        pass: pass,
+        name: 'phase2_pixelBufferShape',
+        detail: pass
+          ? 'PixelBuffer has correct w=4, h=4, count=16, data.length=64'
+          : 'Got w=' + buf.width + ' h=' + buf.height + ' count=' + buf.count + ' data.length=' + buf.data.length
+      };
+    }
+    VALIDATIONS.push(validate_phase2_pixelBufferShape);
+
+    /**
+     * @description Validates cover-crop math for 800x600 into 512x512.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase2_coverCropMath() {
+      const crop = computeCoverCrop(800, 600, 512);
+      // Landscape: sh=600, sw=600, sx=(800-600)/2=100, sy=0
+      const pass = crop.sx === 100 && crop.sy === 0 && crop.sw === 600 && crop.sh === 600;
+      return {
+        pass: pass,
+        name: 'phase2_coverCropMath',
+        detail: pass
+          ? 'Cover crop for 800x600→512: sx=100 sy=0 sw=600 sh=600'
+          : 'Got sx=' + crop.sx + ' sy=' + crop.sy + ' sw=' + crop.sw + ' sh=' + crop.sh
+      };
+    }
+    VALIDATIONS.push(validate_phase2_coverCropMath);
+
+    /**
+     * @description Validates all 5 procedural targets at 8x8.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase2_proceduralTargets() {
+      const errors = [];
+      PROCEDURAL_GENERATORS.forEach(function(gen, idx) {
+        try {
+          var buf = gen.fn(8);
+          if (buf.count !== 64) {
+            errors.push(gen.name + ': count=' + buf.count + ' (expected 64)');
+          }
+          // Check non-uniform: not all pixels identical
+          var allSame = true;
+          for (var i = 4; i < buf.data.length; i += 4) {
+            if (buf.data[i] !== buf.data[0] || buf.data[i + 1] !== buf.data[1]) {
+              allSame = false;
+              break;
+            }
+          }
+          if (allSame) {
+            errors.push(gen.name + ': all pixels identical');
+          }
+        } catch (err) {
+          errors.push(gen.name + ': error: ' + err.message);
+        }
+      });
+      var pass = errors.length === 0;
+      return {
+        pass: pass,
+        name: 'phase2_proceduralTargets',
+        detail: pass
+          ? 'All 5 procedural targets generate valid 8x8 non-uniform buffers'
+          : errors.join('; ')
+      };
+    }
+    VALIDATIONS.push(validate_phase2_proceduralTargets);
 
     // ─── Validation Runner ───
 
