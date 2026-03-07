@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>What Lurks Within</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    /* ═══════════════════════════════════════════
+       CSS CUSTOM PROPERTIES
+       ═══════════════════════════════════════════ */
+    :root {
+      --bg-primary: #0a0a0c;
+      --bg-secondary: #111116;
+      --text-primary: #e0dfe4;
+      --text-accent: #7f5af0;
+      --text-glitch-r: #ff0040;
+      --text-glitch-c: #00f0ff;
+      --danger: #e53170;
+      --toast-bg: #1a1a22;
+      --scanline-opacity: 0.04;
+      --noise-opacity: 0.08;
+    }
+
+    /* ═══════════════════════════════════════════
+       RESET & BASE
+       ═══════════════════════════════════════════ */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Share Tech Mono', monospace;
+      line-height: 1.6;
+    }
+
+    /* ═══════════════════════════════════════════
+       SCANLINE OVERLAY
+       ═══════════════════════════════════════════ */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9999;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 0, 0, var(--scanline-opacity)) 2px,
+        rgba(0, 0, 0, var(--scanline-opacity)) 4px
+      );
+    }
+
+    /* ═══════════════════════════════════════════
+       SCREEN MANAGEMENT
+       ═══════════════════════════════════════════ */
+    .screen {
+      display: none;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    body[data-screen="landing"] #screen-landing,
+    body[data-screen="setup"] #screen-setup,
+    body[data-screen="animation"] #screen-animation,
+    body[data-screen="result"] #screen-result {
+      display: flex;
+    }
+
+    /* ═══════════════════════════════════════════
+       NOISE CANVAS (background)
+       ═══════════════════════════════════════════ */
+    #noise-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+      opacity: var(--noise-opacity);
+    }
+
+    /* ═══════════════════════════════════════════
+       GLITCH TITLE
+       ═══════════════════════════════════════════ */
+    .glitch-title {
+      font-size: clamp(2rem, 6vw, 4.5rem);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-primary);
+      text-shadow:
+        2px 0 var(--text-glitch-r),
+        -2px 0 var(--text-glitch-c);
+      animation: glitchFlicker 3s infinite;
+      position: relative;
+      z-index: 2;
+    }
+
+    @keyframes glitchFlicker {
+      0%, 93%, 95%, 97%, 100% {
+        opacity: 1;
+        text-shadow:
+          2px 0 var(--text-glitch-r),
+          -2px 0 var(--text-glitch-c);
+      }
+      94% {
+        opacity: 0.8;
+        text-shadow:
+          -3px 1px var(--text-glitch-r),
+          3px -1px var(--text-glitch-c);
+      }
+      96% {
+        opacity: 0.9;
+        text-shadow:
+          4px -2px var(--text-glitch-r),
+          -4px 2px var(--text-glitch-c);
+      }
+    }
+
+    /* ═══════════════════════════════════════════
+       TAGLINE TYPEWRITER
+       ═══════════════════════════════════════════ */
+    .tagline {
+      font-size: clamp(0.9rem, 2vw, 1.3rem);
+      color: var(--text-accent);
+      overflow: hidden;
+      white-space: nowrap;
+      border-right: 2px solid var(--text-accent);
+      width: 0;
+      animation:
+        typewriter 2.5s steps(28) 1s forwards,
+        blinkCaret 0.7s step-end infinite;
+      position: relative;
+      z-index: 2;
+    }
+
+    @keyframes typewriter {
+      to { width: 28ch; }
+    }
+
+    @keyframes blinkCaret {
+      50% { border-color: transparent; }
+    }
+
+    /* ═══════════════════════════════════════════
+       LANDING SCREEN
+       ═══════════════════════════════════════════ */
+    #screen-landing {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .landing-buttons {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    /* ═══════════════════════════════════════════
+       BUTTONS
+       ═══════════════════════════════════════════ */
+    .btn {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.95rem;
+      padding: 0.75rem 1.8rem;
+      border: 1px solid var(--text-accent);
+      background: transparent;
+      color: var(--text-accent);
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      transition: all 0.2s ease;
+      position: relative;
+      z-index: 2;
+    }
+
+    .btn:hover {
+      background: var(--text-accent);
+      color: var(--bg-primary);
+      box-shadow: 0 0 20px rgba(127, 90, 240, 0.3);
+    }
+
+    .btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .btn--primary {
+      background: var(--text-accent);
+      color: var(--bg-primary);
+    }
+
+    .btn--primary:hover {
+      background: transparent;
+      color: var(--text-accent);
+    }
+
+    .btn--secondary {
+      border-color: var(--text-primary);
+      color: var(--text-primary);
+      opacity: 0.6;
+    }
+
+    .btn--secondary:hover {
+      opacity: 1;
+      background: rgba(224, 223, 228, 0.1);
+    }
+
+    /* ═══════════════════════════════════════════
+       SETUP SCREEN
+       ═══════════════════════════════════════════ */
+    #screen-setup {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .setup-section {
+      background: var(--bg-secondary);
+      border: 1px solid rgba(127, 90, 240, 0.15);
+      padding: 1.5rem;
+      border-radius: 4px;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    .setup-section h2 {
+      font-size: 1rem;
+      color: var(--text-accent);
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .thumbnail-preview {
+      max-width: 300px;
+      max-height: 300px;
+      display: block;
+      margin: 0.5rem auto;
+      image-rendering: auto;
+      border: 1px solid rgba(127, 90, 240, 0.2);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .file-input-label {
+      display: inline-block;
+      padding: 0.5rem 1.2rem;
+      border: 1px dashed var(--text-accent);
+      color: var(--text-accent);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.85rem;
+    }
+
+    .file-input-label:hover {
+      background: rgba(127, 90, 240, 0.1);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* Option groups (radio-style buttons) */
+    .option-group {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+
+    .option-btn {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.8rem;
+      padding: 0.4rem 1rem;
+      border: 1px solid rgba(224, 223, 228, 0.2);
+      background: transparent;
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      opacity: 0.6;
+    }
+
+    .option-btn:hover {
+      opacity: 1;
+      border-color: var(--text-accent);
+    }
+
+    .option-btn.active {
+      border-color: var(--text-accent);
+      color: var(--text-accent);
+      opacity: 1;
+      background: rgba(127, 90, 240, 0.1);
+    }
+
+    .target-options {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    /* ═══════════════════════════════════════════
+       ANIMATION SCREEN
+       ═══════════════════════════════════════════ */
+    #screen-animation {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    #animation-canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border: 1px solid rgba(127, 90, 240, 0.2);
+      max-width: 90vw;
+      max-height: 70vh;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      max-width: 512px;
+      height: 4px;
+      background: var(--bg-secondary);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--text-accent);
+      transition: width 0.1s linear;
+    }
+
+    .progress-text {
+      font-size: 0.8rem;
+      opacity: 0.6;
+    }
+
+    /* ═══════════════════════════════════════════
+       RESULT SCREEN
+       ═══════════════════════════════════════════ */
+    #screen-result {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      padding: 2rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .result-tagline {
+      font-size: clamp(1rem, 2.5vw, 1.5rem);
+      text-shadow:
+        1px 0 var(--text-glitch-r),
+        -1px 0 var(--text-glitch-c);
+      animation: glitchFlicker 4s infinite;
+    }
+
+    .result-stats {
+      font-size: 0.8rem;
+      opacity: 0.5;
+    }
+
+    .result-buttons {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    /* ═══════════════════════════════════════════
+       HOW IT WORKS MODAL
+       ═══════════════════════════════════════════ */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(10, 10, 12, 0.92);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-secondary);
+      border: 1px solid var(--text-accent);
+      padding: 2rem;
+      max-width: 520px;
+      width: 90%;
+      position: relative;
+      box-shadow:
+        3px 3px 0 var(--text-glitch-r),
+        -3px -3px 0 var(--text-glitch-c);
+    }
+
+    .modal-content h2 {
+      color: var(--text-accent);
+      margin-bottom: 1rem;
+      font-size: 1.2rem;
+      text-transform: uppercase;
+    }
+
+    .modal-content p {
+      margin-bottom: 0.8rem;
+      font-size: 0.9rem;
+      opacity: 0.85;
+      line-height: 1.7;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 0.8rem;
+      right: 1rem;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 1.5rem;
+      cursor: pointer;
+      font-family: 'Share Tech Mono', monospace;
+      opacity: 0.6;
+    }
+
+    .modal-close:hover {
+      opacity: 1;
+    }
+
+    /* ═══════════════════════════════════════════
+       TOAST NOTIFICATIONS
+       ═══════════════════════════════════════════ */
+    #toast-container {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .toast {
+      background: var(--toast-bg);
+      border-left: 3px solid var(--danger);
+      padding: 0.8rem 1.2rem;
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      animation: toastIn 0.3s ease;
+      max-width: 360px;
+    }
+
+    .toast--info {
+      border-left-color: var(--text-accent);
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ═══════════════════════════════════════════
+       PROCESSING OVERLAY
+       ═══════════════════════════════════════════ */
+    #processing-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(10, 10, 12, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 9998;
+      font-size: 1.2rem;
+      color: var(--text-accent);
+    }
+
+    #processing-overlay.active {
+      display: flex;
+    }
+
+    /* ═══════════════════════════════════════════
+       RESPONSIVE
+       ═══════════════════════════════════════════ */
+    @media (max-width: 600px) {
+      .landing-buttons,
+      .result-buttons,
+      .option-group,
+      .target-options {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .setup-section {
+        padding: 1rem;
+      }
+    }
+  </style>
+</head>
+<body data-screen="landing">
+
+  <!-- ═══════════════════════════════════════════
+       NOISE BACKGROUND CANVAS
+       ═══════════════════════════════════════════ -->
+  <canvas id="noise-canvas"></canvas>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: LANDING
+       ═══════════════════════════════════════════ -->
+  <div id="screen-landing" class="screen">
+    <h1 class="glitch-title">What Lurks Within</h1>
+    <p class="tagline">Every photo hides another.</p>
+    <div class="landing-buttons">
+      <button id="btn-upload" class="btn btn--primary">Upload Your Photo</button>
+      <button id="btn-how" class="btn btn--secondary">How It Works</button>
+    </div>
+    <input type="file" id="source-file-input" accept="image/*">
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: SETUP
+       ═══════════════════════════════════════════ -->
+  <div id="screen-setup" class="screen">
+    <div class="setup-section">
+      <h2>Your Photo</h2>
+      <img id="source-preview" class="thumbnail-preview hidden" alt="Source preview">
+      <label class="file-input-label" id="change-source-label" for="change-source-input">Change Photo</label>
+      <input type="file" id="change-source-input" accept="image/*">
+    </div>
+
+    <div class="setup-section">
+      <h2>Hidden Image</h2>
+      <div class="target-options">
+        <button class="option-btn active" data-target-mode="fate">Let fate decide</button>
+        <button class="option-btn" data-target-mode="custom">I have a hidden image</button>
+      </div>
+      <div id="custom-target-area" class="hidden">
+        <label class="file-input-label" for="target-file-input">Upload Target Image</label>
+        <input type="file" id="target-file-input" accept="image/*">
+        <img id="target-preview" class="thumbnail-preview hidden" alt="Target preview">
+      </div>
+    </div>
+
+    <div class="setup-section">
+      <h2>Quality</h2>
+      <div class="option-group" id="quality-group">
+        <button class="option-btn" data-resolution="256">256 &times; 256 &mdash; Lo-fi</button>
+        <button class="option-btn active" data-resolution="512">512 &times; 512 &mdash; Standard</button>
+        <button class="option-btn" data-resolution="768">768 &times; 768 &mdash; High</button>
+      </div>
+    </div>
+
+    <div class="setup-section">
+      <h2>Animation Pattern</h2>
+      <div class="option-group" id="pattern-group">
+        <button class="option-btn" data-pattern="spatial_sweep">Spatial sweep</button>
+        <button class="option-btn active" data-pattern="random_scatter">Random scatter</button>
+        <button class="option-btn" data-pattern="luminance_ordered">Luminance-ordered</button>
+        <button class="option-btn" data-pattern="spiral">Spiral</button>
+      </div>
+    </div>
+
+    <button id="btn-reveal" class="btn btn--primary" disabled>Reveal</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: ANIMATION
+       ═══════════════════════════════════════════ -->
+  <div id="screen-animation" class="screen">
+    <canvas id="animation-canvas"></canvas>
+    <div class="progress-bar-container">
+      <div id="progress-bar-fill" class="progress-bar-fill"></div>
+    </div>
+    <p id="progress-text" class="progress-text">Rearranging 0 of 0 pixels&hellip;</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN: RESULT
+       ═══════════════════════════════════════════ -->
+  <div id="screen-result" class="screen">
+    <canvas id="result-canvas"></canvas>
+    <p class="result-tagline">Same pixels. Different truth.</p>
+    <p id="result-stats" class="result-stats"></p>
+    <div class="result-buttons">
+      <button id="btn-download" class="btn btn--primary">Download Result</button>
+      <button id="btn-retry" class="btn">Try Another Pattern</button>
+      <button id="btn-start-over" class="btn btn--secondary">Start Over</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       HOW IT WORKS MODAL
+       ═══════════════════════════════════════════ -->
+  <div id="modal-how" class="modal-overlay">
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close">&times;</button>
+      <h2>How It Works</h2>
+      <p>Upload any photograph. The app takes every single pixel from your image and rearranges them to recreate a completely different picture.</p>
+      <p>No pixels are added or removed &mdash; the set is identical. Only their positions change. You watch each pixel migrate from its original location to its new home in real time.</p>
+      <p>The result is built entirely from your photo&rsquo;s colours. Same pixels. Different truth.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       PROCESSING OVERLAY
+       ═══════════════════════════════════════════ -->
+  <div id="processing-overlay">Processing&hellip;</div>
+
+  <!-- ═══════════════════════════════════════════
+       TOAST CONTAINER
+       ═══════════════════════════════════════════ -->
+  <div id="toast-container"></div>
+
+  <script>
+    'use strict';
+
+    // ═══════════════════════════════════════════
+    // TESTING FLAG
+    // ═══════════════════════════════════════════
+    const TESTING = location.search.includes('test=true');
+
+    // ═══════════════════════════════════════════
+    // CONFIG
+    // ═══════════════════════════════════════════
+    const CONFIG = {
+      // Colour palette (mirrors CSS custom properties for JS use)
+      COLOR_BG_PRIMARY: '#0a0a0c',
+      COLOR_BG_SECONDARY: '#111116',
+      COLOR_TEXT_PRIMARY: '#e0dfe4',
+      COLOR_TEXT_ACCENT: '#7f5af0',
+      COLOR_GLITCH_R: '#ff0040',
+      COLOR_GLITCH_C: '#00f0ff',
+      COLOR_DANGER: '#e53170',
+
+      // Resolutions
+      RESOLUTION_LOW: 256,
+      RESOLUTION_MID: 512,
+      RESOLUTION_HIGH: 768,
+      DEFAULT_RESOLUTION: 512,
+
+      // Noise canvas
+      NOISE_SCALE: 2,
+      NOISE_FPS: 12,
+
+      // Animation
+      BATCH_PERCENT: 0.005,
+      BATCH_INTERVAL_MS: 16,
+      TWEEN_DURATION_MS: 600,
+      ARC_MAGNITUDE: 15,
+      COMPLETION_DELAY_MS: 500,
+
+      // Pixel algorithm
+      LUMINANCE_BAND_WIDTH: 8,
+
+      // Upload
+      MAX_FILE_SIZE_BYTES: 10 * 1024 * 1024,
+
+      // Toast
+      TOAST_DURATION_MS: 4000,
+
+      // Procedural target count
+      PROCEDURAL_TARGET_COUNT: 5
+    };
+
+    // ═══════════════════════════════════════════
+    // APP STATE
+    // ═══════════════════════════════════════════
+    const APP_STATE = {
+      currentScreen: 'landing',
+      sourceBuffer: null,
+      targetBuffer: null,
+      mapping: null,
+      selectedResolution: CONFIG.DEFAULT_RESOLUTION,
+      selectedPattern: 'random_scatter',
+      targetMode: 'fate',
+      animationFrameId: null,
+      noiseFrameId: null,
+      sourceObjectURL: null,
+      targetObjectURL: null,
+      animationStartTime: null,
+
+      // Typed arrays for animation (allocated in Phase 4)
+      sourceXY: null,
+      targetXY: null,
+      colors: null,
+      startTimes: null
+    };
+
+    // ═══════════════════════════════════════════
+    // SCREEN MANAGEMENT
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Switches the visible screen by setting body data-screen attribute.
+     * @param {string} screenId - One of 'landing', 'setup', 'animation', 'result'
+     */
+    function showScreen(screenId) {
+      const validScreens = ['landing', 'setup', 'animation', 'result'];
+      if (!validScreens.includes(screenId)) {
+        console.warn('showScreen: invalid screen id:', screenId);
+        return;
+      }
+      document.body?.setAttribute('data-screen', screenId);
+      APP_STATE.currentScreen = screenId;
+    }
+
+    // ═══════════════════════════════════════════
+    // TOAST NOTIFICATIONS
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Shows a styled toast notification.
+     * @param {string} message - Text to display
+     * @param {'error'|'info'} type - Toast type
+     */
+    function showToast(message, type) {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const toast = document.createElement('div');
+      toast.className = type === 'info' ? 'toast toast--info' : 'toast';
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(function() {
+        toast.remove();
+      }, CONFIG.TOAST_DURATION_MS);
+    }
+
+    // ═══════════════════════════════════════════
+    // NOISE CANVAS
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Initialises the background VHS noise canvas effect.
+     */
+    function initNoiseCanvas() {
+      const canvas = document.getElementById('noise-canvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        showToast('Canvas 2D not supported by your browser.', 'error');
+        return;
+      }
+
+      /**
+       * @description Resizes the noise canvas to match the window.
+       */
+      function resizeNoise() {
+        canvas.width = Math.ceil(window.innerWidth / CONFIG.NOISE_SCALE);
+        canvas.height = Math.ceil(window.innerHeight / CONFIG.NOISE_SCALE);
+      }
+
+      resizeNoise();
+      window.addEventListener('resize', resizeNoise);
+
+      const interval = 1000 / CONFIG.NOISE_FPS;
+      let lastTime = 0;
+
+      /**
+       * @description Renders a single frame of VHS noise.
+       * @param {number} timestamp - rAF timestamp
+       */
+      function renderNoise(timestamp) {
+        APP_STATE.noiseFrameId = requestAnimationFrame(renderNoise);
+        if (timestamp - lastTime < interval) return;
+        lastTime = timestamp;
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const imageData = ctx.createImageData(w, h);
+        const data = imageData.data;
+        const len = w * h * 4;
+
+        for (let i = 0; i < len; i += 4) {
+          const v = (Math.random() * 255) | 0;
+          data[i] = v;
+          data[i + 1] = v;
+          data[i + 2] = v;
+          data[i + 3] = 255;
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      APP_STATE.noiseFrameId = requestAnimationFrame(renderNoise);
+    }
+
+    // ═══════════════════════════════════════════
+    // OPTION GROUP HELPERS
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Sets up a group of buttons where only one can be active at a time.
+     * @param {string} containerSelector - CSS selector for the container
+     * @param {string} btnSelector - CSS selector for buttons within the container
+     * @param {function} onChange - Callback receiving the clicked button's dataset
+     */
+    function initOptionGroup(containerSelector, btnSelector, onChange) {
+      const container = document.querySelector(containerSelector);
+      if (!container) return;
+      container.addEventListener('click', function(e) {
+        const btn = e.target.closest(btnSelector);
+        if (!btn) return;
+        container.querySelectorAll(btnSelector).forEach(function(b) {
+          b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        if (onChange) onChange(btn.dataset);
+      });
+    }
+
+    // ═══════════════════════════════════════════
+    // EVENT LISTENERS (Phase 1 stubs)
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Binds all Phase 1 UI event listeners.
+     */
+    function initPhase1Events() {
+      // Upload button triggers file input
+      const btnUpload = document.getElementById('btn-upload');
+      const sourceInput = document.getElementById('source-file-input');
+      btnUpload?.addEventListener('click', function() {
+        sourceInput?.click();
+      });
+
+      // How It Works modal
+      const btnHow = document.getElementById('btn-how');
+      const modal = document.getElementById('modal-how');
+      const modalClose = document.getElementById('modal-close');
+      btnHow?.addEventListener('click', function() {
+        modal?.classList.add('active');
+      });
+      modalClose?.addEventListener('click', function() {
+        modal?.classList.remove('active');
+      });
+      modal?.addEventListener('click', function(e) {
+        if (e.target === modal) modal.classList.remove('active');
+      });
+
+      // Quality group
+      initOptionGroup('#quality-group', '.option-btn', function(data) {
+        if (data.resolution) {
+          APP_STATE.selectedResolution = parseInt(data.resolution, 10);
+        }
+      });
+
+      // Pattern group
+      initOptionGroup('#pattern-group', '.option-btn', function(data) {
+        if (data.pattern) {
+          APP_STATE.selectedPattern = data.pattern;
+        }
+      });
+
+      // Target mode toggle
+      const targetOptions = document.querySelectorAll('[data-target-mode]');
+      const customArea = document.getElementById('custom-target-area');
+      targetOptions.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          targetOptions.forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          APP_STATE.targetMode = btn.dataset.targetMode;
+          if (btn.dataset.targetMode === 'custom') {
+            customArea?.classList.remove('hidden');
+          } else {
+            customArea?.classList.add('hidden');
+          }
+        });
+      });
+    }
+
+    // ═══════════════════════════════════════════
+    // INITIALISATION
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Main initialisation — runs on DOMContentLoaded.
+     */
+    function init() {
+      showScreen('landing');
+      initNoiseCanvas();
+      initPhase1Events();
+
+      // Run validation suite if in test mode
+      if (TESTING) {
+        runValidations();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    // ═══════════════════════════════════════════
+    // VALIDATION SUITE
+    // ═══════════════════════════════════════════
+
+    /** @type {Array<function(): {pass: boolean, name: string, detail: string}>} */
+    const VALIDATIONS = [];
+
+    // ─── Phase 1 Validations ───
+
+    /**
+     * @description Validates that all four screen divs exist in the DOM.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase1_allScreensExist() {
+      const ids = ['screen-landing', 'screen-setup', 'screen-animation', 'screen-result'];
+      const missing = ids.filter(function(id) { return !document.getElementById(id); });
+      return {
+        pass: missing.length === 0,
+        name: 'phase1_allScreensExist',
+        detail: missing.length === 0
+          ? 'All 4 screens exist'
+          : 'Missing: ' + missing.join(', ')
+      };
+    }
+    VALIDATIONS.push(validate_phase1_allScreensExist);
+
+    /**
+     * @description Validates that showScreen() correctly toggles screens.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase1_showScreenWorks() {
+      const original = document.body?.getAttribute('data-screen');
+      showScreen('setup');
+      const setupVisible = document.body?.getAttribute('data-screen') === 'setup';
+      const landingDiv = document.getElementById('screen-landing');
+      const setupDiv = document.getElementById('screen-setup');
+      const landingHidden = landingDiv ? getComputedStyle(landingDiv).display === 'none' : false;
+      const setupShown = setupDiv ? getComputedStyle(setupDiv).display !== 'none' : false;
+      // Restore
+      if (original) showScreen(original);
+      const pass = setupVisible && landingHidden && setupShown;
+      return {
+        pass: pass,
+        name: 'phase1_showScreenWorks',
+        detail: pass
+          ? 'showScreen toggles screens correctly'
+          : 'setupVisible=' + setupVisible + ' landingHidden=' + landingHidden + ' setupShown=' + setupShown
+      };
+    }
+    VALIDATIONS.push(validate_phase1_showScreenWorks);
+
+    /**
+     * @description Validates that CONFIG exists with expected keys.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase1_configExists() {
+      const expectedKeys = [
+        'COLOR_BG_PRIMARY', 'COLOR_TEXT_ACCENT', 'RESOLUTION_LOW',
+        'RESOLUTION_MID', 'RESOLUTION_HIGH', 'DEFAULT_RESOLUTION',
+        'BATCH_PERCENT', 'TWEEN_DURATION_MS', 'ARC_MAGNITUDE',
+        'LUMINANCE_BAND_WIDTH', 'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS'
+      ];
+      const missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
+      const wrongType = expectedKeys.filter(function(k) {
+        if (k.startsWith('COLOR_')) return typeof CONFIG[k] !== 'string';
+        return typeof CONFIG[k] !== 'number';
+      });
+      const pass = missing.length === 0 && wrongType.length === 0;
+      return {
+        pass: pass,
+        name: 'phase1_configExists',
+        detail: pass
+          ? 'CONFIG has all expected keys with correct types'
+          : 'missing=[' + missing.join(',') + '] wrongType=[' + wrongType.join(',') + ']'
+      };
+    }
+    VALIDATIONS.push(validate_phase1_configExists);
+
+    // ─── Validation Runner ───
+
+    /**
+     * @description Runs all registered validation functions and logs results.
+     */
+    function runValidations() {
+      const results = VALIDATIONS.map(function(fn) {
+        try {
+          return fn();
+        } catch (err) {
+          return { pass: false, name: fn.name || 'unknown', detail: 'Error: ' + err.message };
+        }
+      });
+      const passed = results.filter(function(r) { return r.pass; }).length;
+      console.log('%c=== VALIDATION RESULTS: ' + passed + '/' + results.length + ' passed ===', 'color: #7f5af0; font-size: 14px;');
+      console.table(results);
+      return results;
+    }
+  </script>
+</body>
+</html>
