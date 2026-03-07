@@ -1205,6 +1205,120 @@
     }
 
     // ═══════════════════════════════════════════
+    // PIXEL ALCHEMY — LUMINANCE, HUE, MAPPING
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Calculates perceived luminance from RGB values.
+     * @param {number} r - Red (0-255)
+     * @param {number} g - Green (0-255)
+     * @param {number} b - Blue (0-255)
+     * @returns {number} Luminance (0-255 range)
+     */
+    function calcLuminance(r, g, b) {
+      return 0.299 * r + 0.587 * g + 0.114 * b;
+    }
+
+    /**
+     * @description Extracts hue from RGB values (0-360).
+     * @param {number} r - Red (0-255)
+     * @param {number} g - Green (0-255)
+     * @param {number} b - Blue (0-255)
+     * @returns {number} Hue in degrees (0-360)
+     */
+    function calcHue(r, g, b) {
+      const rn = r / 255;
+      const gn = g / 255;
+      const bn = b / 255;
+      const max = Math.max(rn, gn, bn);
+      const min = Math.min(rn, gn, bn);
+      const d = max - min;
+
+      if (d === 0) return 0;
+
+      var h;
+      if (max === rn) {
+        h = ((gn - bn) / d) % 6;
+      } else if (max === gn) {
+        h = (bn - rn) / d + 2;
+      } else {
+        h = (rn - gn) / d + 4;
+      }
+
+      h *= 60;
+      if (h < 0) h += 360;
+      return h;
+    }
+
+    /**
+     * @description Pixel sort comparator: primary by luminance band, secondary by hue.
+     * @param {{ luminance: number, hue: number }} a
+     * @param {{ luminance: number, hue: number }} b
+     * @returns {number}
+     */
+    function pixelSortComparator(a, b) {
+      const bandA = Math.floor(a.luminance / CONFIG.LUMINANCE_BAND_WIDTH);
+      const bandB = Math.floor(b.luminance / CONFIG.LUMINANCE_BAND_WIDTH);
+      if (bandA !== bandB) return bandA - bandB;
+      return a.hue - b.hue;
+    }
+
+    /**
+     * @description Builds pixel descriptors from a PixelBuffer.
+     * @param {{ data: Uint8ClampedArray, count: number }} buffer
+     * @returns {Array<{ index: number, r: number, g: number, b: number, a: number, luminance: number, hue: number }>}
+     */
+    function buildPixelDescriptors(buffer) {
+      const descriptors = new Array(buffer.count);
+      const data = buffer.data;
+      for (var i = 0; i < buffer.count; i++) {
+        var off = i * 4;
+        var r = data[off];
+        var g = data[off + 1];
+        var b = data[off + 2];
+        var a = data[off + 3];
+        descriptors[i] = {
+          index: i,
+          r: r,
+          g: g,
+          b: b,
+          a: a,
+          luminance: calcLuminance(r, g, b),
+          hue: calcHue(r, g, b)
+        };
+      }
+      return descriptors;
+    }
+
+    /**
+     * @description Builds the pixel mapping from source to target via luminance+hue sort.
+     * @param {{ data: Uint8ClampedArray, count: number, width: number, height: number }} srcBuf
+     * @param {{ data: Uint8ClampedArray, count: number, width: number, height: number }} tgtBuf
+     * @returns {Array<{ sourceIndex: number, targetIndex: number, r: number, g: number, b: number, a: number, luminance: number }>}
+     */
+    function buildMapping(srcBuf, tgtBuf) {
+      var srcDesc = buildPixelDescriptors(srcBuf);
+      var tgtDesc = buildPixelDescriptors(tgtBuf);
+
+      srcDesc.sort(pixelSortComparator);
+      tgtDesc.sort(pixelSortComparator);
+
+      var mapping = new Array(srcBuf.count);
+      for (var i = 0; i < srcBuf.count; i++) {
+        mapping[i] = {
+          sourceIndex: srcDesc[i].index,
+          targetIndex: tgtDesc[i].index,
+          r: srcDesc[i].r,
+          g: srcDesc[i].g,
+          b: srcDesc[i].b,
+          a: srcDesc[i].a,
+          luminance: srcDesc[i].luminance
+        };
+      }
+      return mapping;
+    }
+
+    // ═══════════════════════════════════════════
     // EVENT LISTENERS
     // ═══════════════════════════════════════════
 
@@ -1416,6 +1530,124 @@
       };
     }
     VALIDATIONS.push(validate_phase1_configExists);
+
+    // ─── Phase 3 Validations ───
+
+    /**
+     * @description Validates luminance calculation for known RGB values.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase3_luminanceCalc() {
+      var rLum = calcLuminance(255, 0, 0);
+      var gLum = calcLuminance(0, 255, 0);
+      var bLum = calcLuminance(0, 0, 255);
+      var rOk = Math.abs(rLum - 76.245) < 0.01;
+      var gOk = Math.abs(gLum - 149.685) < 0.01;
+      var bOk = Math.abs(bLum - 29.07) < 0.01;
+      var pass = rOk && gOk && bOk;
+      return {
+        pass: pass,
+        name: 'phase3_luminanceCalc',
+        detail: pass
+          ? 'Luminance: red=76.245, green=149.685, blue=29.07'
+          : 'Got red=' + rLum.toFixed(3) + ' green=' + gLum.toFixed(3) + ' blue=' + bLum.toFixed(3)
+      };
+    }
+    VALIDATIONS.push(validate_phase3_luminanceCalc);
+
+    /**
+     * @description Validates hue extraction for pure R, G, B.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase3_hueExtraction() {
+      var rHue = calcHue(255, 0, 0);
+      var gHue = calcHue(0, 255, 0);
+      var bHue = calcHue(0, 0, 255);
+      var rOk = Math.abs(rHue - 0) < 1;
+      var gOk = Math.abs(gHue - 120) < 1;
+      var bOk = Math.abs(bHue - 240) < 1;
+      var pass = rOk && gOk && bOk;
+      return {
+        pass: pass,
+        name: 'phase3_hueExtraction',
+        detail: pass
+          ? 'Hue: red~0, green~120, blue~240'
+          : 'Got red=' + rHue.toFixed(1) + ' green=' + gHue.toFixed(1) + ' blue=' + bHue.toFixed(1)
+      };
+    }
+    VALIDATIONS.push(validate_phase3_hueExtraction);
+
+    /**
+     * @description Validates sort comparator ordering for known 4-pixel set.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase3_sortComparator() {
+      var pixels = [
+        { luminance: 200, hue: 120 },
+        { luminance: 10, hue: 50 },
+        { luminance: 200, hue: 30 },
+        { luminance: 100, hue: 0 }
+      ];
+      pixels.sort(pixelSortComparator);
+      // Expected order by luminance band then hue:
+      // lum=10 (band 1), lum=100 (band 12), lum=200/hue=30 (band 25), lum=200/hue=120 (band 25)
+      var pass = pixels[0].luminance === 10 &&
+                 pixels[1].luminance === 100 &&
+                 pixels[2].hue === 30 &&
+                 pixels[3].hue === 120;
+      return {
+        pass: pass,
+        name: 'phase3_sortComparator',
+        detail: pass
+          ? 'Comparator sorts by luminance band then hue'
+          : 'Order: ' + pixels.map(function(p) { return 'L' + p.luminance + '/H' + p.hue; }).join(', ')
+      };
+    }
+    VALIDATIONS.push(validate_phase3_sortComparator);
+
+    /**
+     * @description Validates mapping bijection: every source and target index appears once.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase3_mappingBijection() {
+      // Create two small 4x4 pixel buffers with different data
+      var srcData = new Uint8ClampedArray(16 * 4);
+      var tgtData = new Uint8ClampedArray(16 * 4);
+      for (var i = 0; i < 16; i++) {
+        srcData[i * 4] = i * 16;     // R
+        srcData[i * 4 + 1] = 0;      // G
+        srcData[i * 4 + 2] = 0;      // B
+        srcData[i * 4 + 3] = 255;    // A
+        tgtData[i * 4] = 0;
+        tgtData[i * 4 + 1] = i * 16;
+        tgtData[i * 4 + 2] = 0;
+        tgtData[i * 4 + 3] = 255;
+      }
+      var srcBuf = createPixelBufferFromData(srcData, 4, 4);
+      var tgtBuf = createPixelBufferFromData(tgtData, 4, 4);
+      var mapping = buildMapping(srcBuf, tgtBuf);
+
+      if (mapping.length !== 16) {
+        return { pass: false, name: 'phase3_mappingBijection', detail: 'mapping.length=' + mapping.length };
+      }
+
+      var srcSet = new Set();
+      var tgtSet = new Set();
+      mapping.forEach(function(m) {
+        srcSet.add(m.sourceIndex);
+        tgtSet.add(m.targetIndex);
+      });
+
+      var pass = srcSet.size === 16 && tgtSet.size === 16;
+      return {
+        pass: pass,
+        name: 'phase3_mappingBijection',
+        detail: pass
+          ? 'All 16 source and 16 target indices are unique (bijection confirmed)'
+          : 'srcSet.size=' + srcSet.size + ' tgtSet.size=' + tgtSet.size
+      };
+    }
+    VALIDATIONS.push(validate_phase3_mappingBijection);
 
     // ─── Phase 2 Validations ───
 
