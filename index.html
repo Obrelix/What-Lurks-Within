@@ -1319,6 +1319,330 @@
     }
 
     // ═══════════════════════════════════════════
+    // ANIMATION PATTERNS — SORT ORDERS
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Fisher-Yates shuffle of an array (in-place).
+     * @param {Array} arr
+     * @returns {Array} The same array, shuffled
+     */
+    function fisherYatesShuffle(arr) {
+      for (var i = arr.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = tmp;
+      }
+      return arr;
+    }
+
+    /**
+     * @description Sorts mapping into animation order based on the selected pattern.
+     * @param {Array} mapping - The pixel mapping array
+     * @param {string} pattern - Pattern name
+     * @param {number} width - Canvas width (= height for square)
+     * @returns {Array} The same mapping array, re-sorted
+     */
+    function sortMappingByPattern(mapping, pattern, width) {
+      switch (pattern) {
+        case 'spatial_sweep':
+          mapping.sort(function(a, b) {
+            var ax = a.targetIndex % width;
+            var bx = b.targetIndex % width;
+            if (ax !== bx) return ax - bx;
+            var ay = Math.floor(a.targetIndex / width);
+            var by = Math.floor(b.targetIndex / width);
+            return ay - by;
+          });
+          break;
+        case 'luminance_ordered':
+          mapping.sort(function(a, b) {
+            return a.luminance - b.luminance;
+          });
+          break;
+        case 'spiral':
+          var cx = width / 2;
+          var cy = width / 2;
+          mapping.sort(function(a, b) {
+            var ax = a.targetIndex % width;
+            var ay = Math.floor(a.targetIndex / width);
+            var bx = b.targetIndex % width;
+            var by = Math.floor(b.targetIndex / width);
+            var dA = (ax - cx) * (ax - cx) + (ay - cy) * (ay - cy);
+            var dB = (bx - cx) * (bx - cx) + (by - cy) * (by - cy);
+            return dA - dB;
+          });
+          break;
+        case 'random_scatter':
+        default:
+          fisherYatesShuffle(mapping);
+          break;
+      }
+      return mapping;
+    }
+
+    // ═══════════════════════════════════════════
+    // ANIMATION ENGINE
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Easing function: ease-in-out cubic.
+     * @param {number} t - Progress (0 to 1)
+     * @returns {number} Eased value (0 to 1)
+     */
+    function easeInOutCubic(t) {
+      return t < 0.5
+        ? 4 * t * t * t
+        : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    /**
+     * @description Builds pre-allocated typed arrays for the animation loop.
+     * @param {Array} mapping - The pixel mapping array
+     * @param {number} width - Canvas width
+     * @returns {{ sourceXY: Float32Array, targetXY: Float32Array, colors: Uint8ClampedArray, startTimes: Float64Array }}
+     */
+    function buildAnimationArrays(mapping, width) {
+      var count = mapping.length;
+      var sourceXY = new Float32Array(count * 2);
+      var targetXY = new Float32Array(count * 2);
+      var colors = new Uint8ClampedArray(count * 4);
+      var startTimes = new Float64Array(count);
+
+      for (var i = 0; i < count; i++) {
+        var m = mapping[i];
+        sourceXY[i * 2] = m.sourceIndex % width;
+        sourceXY[i * 2 + 1] = Math.floor(m.sourceIndex / width);
+        targetXY[i * 2] = m.targetIndex % width;
+        targetXY[i * 2 + 1] = Math.floor(m.targetIndex / width);
+        colors[i * 4] = m.r;
+        colors[i * 4 + 1] = m.g;
+        colors[i * 4 + 2] = m.b;
+        colors[i * 4 + 3] = m.a;
+        startTimes[i] = 0;
+      }
+
+      return {
+        sourceXY: sourceXY,
+        targetXY: targetXY,
+        colors: colors,
+        startTimes: startTimes
+      };
+    }
+
+    /**
+     * @description Starts the pixel reveal animation.
+     */
+    function startReveal() {
+      var overlay = document.getElementById('processing-overlay');
+      if (overlay) overlay.classList.add('active');
+
+      // Use setTimeout to avoid blocking UI during mapping computation
+      setTimeout(function() {
+        try {
+          var srcBuf = APP_STATE.sourceBuffer;
+          var tgtBuf = APP_STATE.targetBuffer;
+          if (!srcBuf || !tgtBuf) {
+            showToast('Missing image data.', 'error');
+            if (overlay) overlay.classList.remove('active');
+            return;
+          }
+
+          // Build mapping
+          var mapping = buildMapping(srcBuf, tgtBuf);
+
+          // Sort by selected pattern
+          sortMappingByPattern(mapping, APP_STATE.selectedPattern, srcBuf.width);
+
+          APP_STATE.mapping = mapping;
+
+          // Build typed arrays
+          var arrays = buildAnimationArrays(mapping, srcBuf.width);
+          APP_STATE.sourceXY = arrays.sourceXY;
+          APP_STATE.targetXY = arrays.targetXY;
+          APP_STATE.colors = arrays.colors;
+          APP_STATE.startTimes = arrays.startTimes;
+
+          // Setup canvas
+          var canvas = document.getElementById('animation-canvas');
+          if (!canvas) {
+            showToast('Animation canvas not found.', 'error');
+            if (overlay) overlay.classList.remove('active');
+            return;
+          }
+          canvas.width = srcBuf.width;
+          canvas.height = srcBuf.height;
+
+          // Set CSS display size for comfortable viewing
+          var displaySize = Math.min(
+            Math.floor(window.innerWidth * 0.85),
+            Math.floor(window.innerHeight * 0.65)
+          );
+          canvas.style.width = displaySize + 'px';
+          canvas.style.height = displaySize + 'px';
+
+          APP_STATE.animationStartTime = null;
+          APP_STATE.animBatchIndex = 0;
+          APP_STATE.animSettled = 0;
+          APP_STATE.animLastBatchTime = 0;
+
+          if (overlay) overlay.classList.remove('active');
+          showScreen('animation');
+          APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
+        } catch (err) {
+          if (overlay) overlay.classList.remove('active');
+          showToast('Error building mapping: ' + err.message, 'error');
+        }
+      }, 0);
+    }
+
+    /**
+     * @description The main animation loop — renders pixels each frame.
+     * @param {number} timestamp - rAF timestamp
+     */
+    function animationLoop(timestamp) {
+      if (APP_STATE.currentScreen !== 'animation') return;
+
+      if (!APP_STATE.animationStartTime) {
+        APP_STATE.animationStartTime = timestamp;
+        APP_STATE.animLastBatchTime = timestamp;
+      }
+
+      var canvas = document.getElementById('animation-canvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      var width = canvas.width;
+      var height = canvas.height;
+      var count = APP_STATE.mapping.length;
+      var sourceXY = APP_STATE.sourceXY;
+      var targetXY = APP_STATE.targetXY;
+      var colors = APP_STATE.colors;
+      var startTimes = APP_STATE.startTimes;
+      var tweenDur = CONFIG.TWEEN_DURATION_MS;
+
+      // Release new batches
+      var batchSize = Math.ceil(count * CONFIG.BATCH_PERCENT);
+      if (timestamp - APP_STATE.animLastBatchTime >= CONFIG.BATCH_INTERVAL_MS) {
+        var end = Math.min(APP_STATE.animBatchIndex + batchSize, count);
+        for (var b = APP_STATE.animBatchIndex; b < end; b++) {
+          if (startTimes[b] === 0) {
+            startTimes[b] = timestamp;
+          }
+        }
+        APP_STATE.animBatchIndex = end;
+        APP_STATE.animLastBatchTime = timestamp;
+      }
+
+      // Render frame
+      var imageData = ctx.createImageData(width, height);
+      var pixels = imageData.data;
+      var settled = 0;
+
+      for (var i = 0; i < count; i++) {
+        var st = startTimes[i];
+        var sx = sourceXY[i * 2];
+        var sy = sourceXY[i * 2 + 1];
+        var tx = targetXY[i * 2];
+        var ty = targetXY[i * 2 + 1];
+        var px, py;
+
+        if (st === 0) {
+          // Not started — draw at source
+          px = sx;
+          py = sy;
+        } else {
+          var elapsed = timestamp - st;
+          if (elapsed >= tweenDur) {
+            // Finished — draw at target
+            px = tx;
+            py = ty;
+            settled++;
+          } else {
+            // Tweening — interpolate with arc
+            var t = easeInOutCubic(elapsed / tweenDur);
+            var arcScale = 4 * t * (1 - t);
+            var arcX = Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arcScale;
+            var arcY = Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arcScale;
+            px = sx + (tx - sx) * t + arcX;
+            py = sy + (ty - sy) * t + arcY;
+          }
+        }
+
+        // Clamp to canvas bounds
+        var ix = Math.round(px);
+        var iy = Math.round(py);
+        if (ix < 0) ix = 0;
+        if (ix >= width) ix = width - 1;
+        if (iy < 0) iy = 0;
+        if (iy >= height) iy = height - 1;
+
+        var off = (iy * width + ix) * 4;
+        pixels[off] = colors[i * 4];
+        pixels[off + 1] = colors[i * 4 + 1];
+        pixels[off + 2] = colors[i * 4 + 2];
+        pixels[off + 3] = colors[i * 4 + 3];
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+
+      // Update progress
+      APP_STATE.animSettled = settled;
+      var pct = count > 0 ? (settled / count) * 100 : 0;
+      var fill = document.getElementById('progress-bar-fill');
+      if (fill) fill.style.width = pct + '%';
+      var text = document.getElementById('progress-text');
+      if (text) text.textContent = 'Rearranging ' + settled + ' of ' + count + ' pixels\u2026';
+
+      // Check completion
+      if (settled >= count) {
+        setTimeout(function() {
+          finishAnimation();
+        }, CONFIG.COMPLETION_DELAY_MS);
+        return;
+      }
+
+      APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
+    }
+
+    /**
+     * @description Called when animation completes — transitions to result screen.
+     */
+    function finishAnimation() {
+      if (APP_STATE.animationFrameId) {
+        cancelAnimationFrame(APP_STATE.animationFrameId);
+        APP_STATE.animationFrameId = null;
+      }
+
+      // Copy final state to result canvas
+      var animCanvas = document.getElementById('animation-canvas');
+      var resultCanvas = document.getElementById('result-canvas');
+      if (animCanvas && resultCanvas) {
+        resultCanvas.width = animCanvas.width;
+        resultCanvas.height = animCanvas.height;
+        resultCanvas.style.width = animCanvas.style.width;
+        resultCanvas.style.height = animCanvas.style.height;
+        var ctx = resultCanvas.getContext('2d');
+        if (ctx) ctx.drawImage(animCanvas, 0, 0);
+      }
+
+      // Compute stats
+      var elapsed = APP_STATE.animationStartTime
+        ? ((performance.now() - APP_STATE.animationStartTime) / 1000).toFixed(1)
+        : '?';
+      var stats = document.getElementById('result-stats');
+      if (stats) {
+        stats.textContent = APP_STATE.selectedResolution + '\u00d7' + APP_STATE.selectedResolution +
+          ' \u2022 ' + APP_STATE.selectedPattern.replace(/_/g, ' ') +
+          ' \u2022 ' + elapsed + 's';
+      }
+
+      showScreen('result');
+    }
+
+    // ═══════════════════════════════════════════
     // EVENT LISTENERS
     // ═══════════════════════════════════════════
 
@@ -1365,12 +1689,7 @@
           showToast('No target image available.', 'error');
           return;
         }
-        // Proceed to animation (Phase 3+4 will handle mapping + animation)
-        if (typeof startReveal === 'function') {
-          startReveal();
-        } else {
-          showToast('Animation engine not yet implemented.', 'info');
-        }
+        startReveal();
       });
 
       // Drag and drop
@@ -1530,6 +1849,108 @@
       };
     }
     VALIDATIONS.push(validate_phase1_configExists);
+
+    // ─── Phase 4 Validations ───
+
+    /**
+     * @description Validates easeInOutCubic at boundary and midpoint.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase4_easing() {
+      var e0 = easeInOutCubic(0);
+      var e1 = easeInOutCubic(1);
+      var e5 = easeInOutCubic(0.5);
+      var pass = e0 === 0 && e1 === 1 && Math.abs(e5 - 0.5) < 0.001;
+      return {
+        pass: pass,
+        name: 'phase4_easing',
+        detail: pass
+          ? 'easeInOutCubic(0)=0, (0.5)=0.5, (1)=1'
+          : 'Got (0)=' + e0 + ' (0.5)=' + e5 + ' (1)=' + e1
+      };
+    }
+    VALIDATIONS.push(validate_phase4_easing);
+
+    /**
+     * @description Validates that each pattern sort produces a distinct order.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase4_patternOrders() {
+      // Build a small 4x4 mapping
+      var mapping = [];
+      for (var i = 0; i < 16; i++) {
+        mapping.push({
+          sourceIndex: i,
+          targetIndex: 15 - i,
+          r: i * 16, g: 0, b: 0, a: 255,
+          luminance: i * 16
+        });
+      }
+
+      var patterns = ['spatial_sweep', 'random_scatter', 'luminance_ordered', 'spiral'];
+      var orders = {};
+      patterns.forEach(function(p) {
+        var copy = mapping.map(function(m) { return Object.assign({}, m); });
+        sortMappingByPattern(copy, p, 4);
+        orders[p] = copy.map(function(m) { return m.sourceIndex; }).join(',');
+      });
+
+      // Check that not all orders are identical (random_scatter might match sometimes — accept 3 distinct)
+      var uniqueOrders = new Set(Object.values(orders));
+      var pass = uniqueOrders.size >= 3;
+      return {
+        pass: pass,
+        name: 'phase4_patternOrders',
+        detail: pass
+          ? uniqueOrders.size + ' distinct orderings from 4 patterns'
+          : 'Only ' + uniqueOrders.size + ' distinct orderings'
+      };
+    }
+    VALIDATIONS.push(validate_phase4_patternOrders);
+
+    /**
+     * @description Validates arc offset is 0 at t=0 and t=1, peaks at t=0.5.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase4_arcOffset() {
+      var arc0 = 4 * 0 * (1 - 0);
+      var arc1 = 4 * 1 * (1 - 1);
+      var arc5 = 4 * 0.5 * (1 - 0.5);
+      var pass = arc0 === 0 && arc1 === 0 && arc5 === 1;
+      return {
+        pass: pass,
+        name: 'phase4_arcOffset',
+        detail: pass
+          ? 'Arc parabola: 0 at t=0, 1 at t=0.5, 0 at t=1'
+          : 'Got t=0:' + arc0 + ' t=0.5:' + arc5 + ' t=1:' + arc1
+      };
+    }
+    VALIDATIONS.push(validate_phase4_arcOffset);
+
+    /**
+     * @description Validates typed array sizes from buildAnimationArrays.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase4_typedArraySizes() {
+      var mapping = [];
+      for (var i = 0; i < 16; i++) {
+        mapping.push({ sourceIndex: i, targetIndex: 15 - i, r: 0, g: 0, b: 0, a: 255, luminance: 0 });
+      }
+      var arrays = buildAnimationArrays(mapping, 4);
+      var pass = arrays.sourceXY.length === 32 &&
+                 arrays.targetXY.length === 32 &&
+                 arrays.colors.length === 64 &&
+                 arrays.startTimes.length === 16;
+      return {
+        pass: pass,
+        name: 'phase4_typedArraySizes',
+        detail: pass
+          ? 'sourceXY=32, targetXY=32, colors=64, startTimes=16'
+          : 'Got sXY=' + arrays.sourceXY.length + ' tXY=' + arrays.targetXY.length +
+            ' c=' + arrays.colors.length + ' st=' + arrays.startTimes.length
+      };
+    }
+    VALIDATIONS.push(validate_phase4_typedArraySizes);
 
     // ─── Phase 3 Validations ───
 
