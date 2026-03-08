@@ -1,0 +1,843 @@
+'use strict';
+
+import { CONFIG } from '../config.js';
+import { APP_STATE } from '../state.js';
+import { calcLuminance, calcHue, easeInOutCubic, pixelSortComparator } from '../utils.js';
+import { showScreen } from '../ui/screens.js';
+import { computeCoverCrop, createPixelBufferFromData } from '../image/pipeline.js';
+import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
+import {
+  buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
+} from '../image/matching.js';
+import { buildMapping } from '../algorithm/pixel-alchemy.js';
+import { sortMappingByPattern } from '../algorithm/patterns.js';
+import { buildAnimationArrays } from '../animation/engine.js';
+import { resetState } from '../state-management.js';
+
+// ═══════════════════════════════════════════
+// VALIDATION SUITE
+// ═══════════════════════════════════════════
+
+/** @type {Array<function(): {pass: boolean, name: string, detail: string}>} */
+const VALIDATIONS = [];
+
+// ─── Phase 1 Validations ───
+
+/**
+ * @description Validates that all four screen divs exist in the DOM.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase1_allScreensExist() {
+  const ids = ['screen-landing', 'screen-setup', 'screen-animation', 'screen-result'];
+  const missing = ids.filter(function(id) { return !document.getElementById(id); });
+  return {
+    pass: missing.length === 0,
+    name: 'phase1_allScreensExist',
+    detail: missing.length === 0
+      ? 'All 4 screens exist'
+      : 'Missing: ' + missing.join(', ')
+  };
+}
+VALIDATIONS.push(validate_phase1_allScreensExist);
+
+/**
+ * @description Validates that showScreen() correctly toggles screens.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase1_showScreenWorks() {
+  const original = document.body?.getAttribute('data-screen');
+  showScreen('setup');
+  const setupVisible = document.body?.getAttribute('data-screen') === 'setup';
+  const landingDiv = document.getElementById('screen-landing');
+  const setupDiv = document.getElementById('screen-setup');
+  const landingHidden = landingDiv ? getComputedStyle(landingDiv).display === 'none' : false;
+  const setupShown = setupDiv ? getComputedStyle(setupDiv).display !== 'none' : false;
+  if (original) showScreen(original);
+  const pass = setupVisible && landingHidden && setupShown;
+  return {
+    pass: pass,
+    name: 'phase1_showScreenWorks',
+    detail: pass
+      ? 'showScreen toggles screens correctly'
+      : 'setupVisible=' + setupVisible + ' landingHidden=' + landingHidden + ' setupShown=' + setupShown
+  };
+}
+VALIDATIONS.push(validate_phase1_showScreenWorks);
+
+/**
+ * @description Validates that CONFIG exists with expected keys.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase1_configExists() {
+  const expectedKeys = [
+    'COLOR_BG_PRIMARY', 'COLOR_TEXT_ACCENT', 'RESOLUTION_LOW',
+    'RESOLUTION_MID', 'RESOLUTION_HIGH', 'DEFAULT_RESOLUTION',
+    'TWEEN_DURATION_MS', 'ARC_MAGNITUDE', 'TARGET_DURATION_S',
+    'LUMINANCE_BAND_WIDTH', 'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS'
+  ];
+  const missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
+  const wrongType = expectedKeys.filter(function(k) {
+    if (k.startsWith('COLOR_')) return typeof CONFIG[k] !== 'string';
+    return typeof CONFIG[k] !== 'number';
+  });
+  const pass = missing.length === 0 && wrongType.length === 0;
+  return {
+    pass: pass,
+    name: 'phase1_configExists',
+    detail: pass
+      ? 'CONFIG has all expected keys with correct types'
+      : 'missing=[' + missing.join(',') + '] wrongType=[' + wrongType.join(',') + ']'
+  };
+}
+VALIDATIONS.push(validate_phase1_configExists);
+
+// ─── Phase 5 Validations ───
+
+/**
+ * @description Validates that all CONFIG keys referenced in the codebase exist.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase5_configComplete() {
+  var expectedKeys = [
+    'COLOR_BG_PRIMARY', 'COLOR_BG_SECONDARY', 'COLOR_TEXT_PRIMARY',
+    'COLOR_TEXT_ACCENT', 'COLOR_GLITCH_R', 'COLOR_GLITCH_C', 'COLOR_DANGER',
+    'RESOLUTION_LOW', 'RESOLUTION_MID', 'RESOLUTION_HIGH', 'DEFAULT_RESOLUTION',
+    'NOISE_SCALE', 'NOISE_FPS',
+    'TWEEN_DURATION_MS', 'TARGET_DURATION_S',
+    'ARC_MAGNITUDE', 'COMPLETION_DELAY_MS',
+    'LUMINANCE_BAND_WIDTH',
+    'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS', 'PROCEDURAL_TARGET_COUNT',
+    'CANVAS_GAP_RATIO', 'MAX_INFLIGHT',
+    'HISTOGRAM_MIN_SCORE', 'HISTOGRAM_BINS', 'DEFAULT_IMAGE_PATHS'
+  ];
+  var missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
+  var wrongType = expectedKeys.filter(function(k) {
+    if (!(k in CONFIG)) return false;
+    if (k.startsWith('COLOR_')) return typeof CONFIG[k] !== 'string';
+    if (k === 'DEFAULT_IMAGE_PATHS') return !Array.isArray(CONFIG[k]);
+    return typeof CONFIG[k] !== 'number';
+  });
+  var pass = missing.length === 0 && wrongType.length === 0;
+  return {
+    pass: pass,
+    name: 'phase5_configComplete',
+    detail: pass
+      ? 'All ' + expectedKeys.length + ' CONFIG keys present with correct types'
+      : 'missing=[' + missing.join(',') + '] wrongType=[' + wrongType.join(',') + ']'
+  };
+}
+VALIDATIONS.push(validate_phase5_configComplete);
+
+/**
+ * @description Validates resetState clears all buffer and mapping state.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase5_stateReset() {
+  var savedSrc = APP_STATE.sourceBuffer;
+  var savedTgt = APP_STATE.targetBuffer;
+  var savedMap = APP_STATE.mapping;
+
+  APP_STATE.sourceBuffer = { dummy: true };
+  APP_STATE.targetBuffer = { dummy: true };
+  APP_STATE.mapping = [1, 2, 3];
+
+  resetState();
+
+  var pass = APP_STATE.sourceBuffer === null &&
+             APP_STATE.targetBuffer === null &&
+             APP_STATE.mapping === null;
+
+  APP_STATE.sourceBuffer = savedSrc;
+  APP_STATE.targetBuffer = savedTgt;
+  APP_STATE.mapping = savedMap;
+
+  return {
+    pass: pass,
+    name: 'phase5_stateReset',
+    detail: pass
+      ? 'resetState() nulls sourceBuffer, targetBuffer, mapping'
+      : 'Some state not null after resetState()'
+  };
+}
+VALIDATIONS.push(validate_phase5_stateReset);
+
+/**
+ * @description Meta-test: runs all validations and confirms all pass.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase5_allValidationsPass() {
+  var failures = [];
+  VALIDATIONS.forEach(function(fn) {
+    if (fn === validate_phase5_allValidationsPass) return;
+    try {
+      var result = fn();
+      if (!result.pass) failures.push(result.name);
+    } catch (err) {
+      failures.push(fn.name + '(error)');
+    }
+  });
+  var pass = failures.length === 0;
+  return {
+    pass: pass,
+    name: 'phase5_allValidationsPass',
+    detail: pass
+      ? 'All validations pass'
+      : 'Failing: ' + failures.join(', ')
+  };
+}
+VALIDATIONS.push(validate_phase5_allValidationsPass);
+
+// ─── Phase 4 Validations ───
+
+/**
+ * @description Validates easeInOutCubic at boundary and midpoint.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase4_easing() {
+  var e0 = easeInOutCubic(0);
+  var e1 = easeInOutCubic(1);
+  var e5 = easeInOutCubic(0.5);
+  var pass = e0 === 0 && e1 === 1 && Math.abs(e5 - 0.5) < 0.001;
+  return {
+    pass: pass,
+    name: 'phase4_easing',
+    detail: pass
+      ? 'easeInOutCubic(0)=0, (0.5)=0.5, (1)=1'
+      : 'Got (0)=' + e0 + ' (0.5)=' + e5 + ' (1)=' + e1
+  };
+}
+VALIDATIONS.push(validate_phase4_easing);
+
+/**
+ * @description Validates that each pattern sort produces a distinct order.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase4_patternOrders() {
+  var mapping = [];
+  for (var i = 0; i < 16; i++) {
+    mapping.push({
+      sourceIndex: i,
+      targetIndex: 15 - i,
+      r: i * 16, g: 0, b: 0, a: 255,
+      luminance: i * 16
+    });
+  }
+
+  var patterns = ['spatial_sweep', 'random_scatter', 'luminance_ordered', 'spiral'];
+  var orders = {};
+  patterns.forEach(function(p) {
+    var copy = mapping.map(function(m) { return Object.assign({}, m); });
+    sortMappingByPattern(copy, p, 4);
+    orders[p] = copy.map(function(m) { return m.sourceIndex; }).join(',');
+  });
+
+  var uniqueOrders = new Set(Object.values(orders));
+  var pass = uniqueOrders.size >= 3;
+  return {
+    pass: pass,
+    name: 'phase4_patternOrders',
+    detail: pass
+      ? uniqueOrders.size + ' distinct orderings from 4 patterns'
+      : 'Only ' + uniqueOrders.size + ' distinct orderings'
+  };
+}
+VALIDATIONS.push(validate_phase4_patternOrders);
+
+/**
+ * @description Validates arc offset is 0 at t=0 and t=1, peaks at t=0.5.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase4_arcOffset() {
+  var arc0 = 4 * 0 * (1 - 0);
+  var arc1 = 4 * 1 * (1 - 1);
+  var arc5 = 4 * 0.5 * (1 - 0.5);
+  var pass = arc0 === 0 && arc1 === 0 && arc5 === 1;
+  return {
+    pass: pass,
+    name: 'phase4_arcOffset',
+    detail: pass
+      ? 'Arc parabola: 0 at t=0, 1 at t=0.5, 0 at t=1'
+      : 'Got t=0:' + arc0 + ' t=0.5:' + arc5 + ' t=1:' + arc1
+  };
+}
+VALIDATIONS.push(validate_phase4_arcOffset);
+
+/**
+ * @description Validates typed array sizes from buildAnimationArrays.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase4_typedArraySizes() {
+  var mapping = [];
+  for (var i = 0; i < 16; i++) {
+    mapping.push({ sourceIndex: i, targetIndex: 15 - i, r: 0, g: 0, b: 0, a: 255, luminance: 0 });
+  }
+  var arrays = buildAnimationArrays(mapping, 4, 0);
+  var pass = arrays.sourceXY.length === 32 &&
+             arrays.targetXY.length === 32 &&
+             arrays.colors.length === 64 &&
+             arrays.startTimes.length === 16;
+  return {
+    pass: pass,
+    name: 'phase4_typedArraySizes',
+    detail: pass
+      ? 'sourceXY=32, targetXY=32, colors=64, startTimes=16'
+      : 'Got sXY=' + arrays.sourceXY.length + ' tXY=' + arrays.targetXY.length +
+        ' c=' + arrays.colors.length + ' st=' + arrays.startTimes.length
+  };
+}
+VALIDATIONS.push(validate_phase4_typedArraySizes);
+
+// ─── Phase 3 Validations ───
+
+/**
+ * @description Validates luminance calculation for known RGB values.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase3_luminanceCalc() {
+  var rLum = calcLuminance(255, 0, 0);
+  var gLum = calcLuminance(0, 255, 0);
+  var bLum = calcLuminance(0, 0, 255);
+  var rOk = Math.abs(rLum - 76.245) < 0.01;
+  var gOk = Math.abs(gLum - 149.685) < 0.01;
+  var bOk = Math.abs(bLum - 29.07) < 0.01;
+  var pass = rOk && gOk && bOk;
+  return {
+    pass: pass,
+    name: 'phase3_luminanceCalc',
+    detail: pass
+      ? 'Luminance: red=76.245, green=149.685, blue=29.07'
+      : 'Got red=' + rLum.toFixed(3) + ' green=' + gLum.toFixed(3) + ' blue=' + bLum.toFixed(3)
+  };
+}
+VALIDATIONS.push(validate_phase3_luminanceCalc);
+
+/**
+ * @description Validates hue extraction for pure R, G, B.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase3_hueExtraction() {
+  var rHue = calcHue(255, 0, 0);
+  var gHue = calcHue(0, 255, 0);
+  var bHue = calcHue(0, 0, 255);
+  var rOk = Math.abs(rHue - 0) < 1;
+  var gOk = Math.abs(gHue - 120) < 1;
+  var bOk = Math.abs(bHue - 240) < 1;
+  var pass = rOk && gOk && bOk;
+  return {
+    pass: pass,
+    name: 'phase3_hueExtraction',
+    detail: pass
+      ? 'Hue: red~0, green~120, blue~240'
+      : 'Got red=' + rHue.toFixed(1) + ' green=' + gHue.toFixed(1) + ' blue=' + bHue.toFixed(1)
+  };
+}
+VALIDATIONS.push(validate_phase3_hueExtraction);
+
+/**
+ * @description Validates sort comparator ordering for known 4-pixel set.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase3_sortComparator() {
+  var pixels = [
+    { luminance: 200, hue: 120 },
+    { luminance: 10, hue: 50 },
+    { luminance: 200, hue: 30 },
+    { luminance: 100, hue: 0 }
+  ];
+  pixels.sort(pixelSortComparator);
+  var pass = pixels[0].luminance === 10 &&
+             pixels[1].luminance === 100 &&
+             pixels[2].hue === 30 &&
+             pixels[3].hue === 120;
+  return {
+    pass: pass,
+    name: 'phase3_sortComparator',
+    detail: pass
+      ? 'Comparator sorts by luminance band then hue'
+      : 'Order: ' + pixels.map(function(p) { return 'L' + p.luminance + '/H' + p.hue; }).join(', ')
+  };
+}
+VALIDATIONS.push(validate_phase3_sortComparator);
+
+/**
+ * @description Validates mapping bijection: every source and target index appears once.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase3_mappingBijection() {
+  var srcData = new Uint8ClampedArray(16 * 4);
+  var tgtData = new Uint8ClampedArray(16 * 4);
+  for (var i = 0; i < 16; i++) {
+    srcData[i * 4] = i * 16;
+    srcData[i * 4 + 1] = 0;
+    srcData[i * 4 + 2] = 0;
+    srcData[i * 4 + 3] = 255;
+    tgtData[i * 4] = 0;
+    tgtData[i * 4 + 1] = i * 16;
+    tgtData[i * 4 + 2] = 0;
+    tgtData[i * 4 + 3] = 255;
+  }
+  var srcBuf = createPixelBufferFromData(srcData, 4, 4);
+  var tgtBuf = createPixelBufferFromData(tgtData, 4, 4);
+  var mapping = buildMapping(srcBuf, tgtBuf);
+
+  if (mapping.length !== 16) {
+    return { pass: false, name: 'phase3_mappingBijection', detail: 'mapping.length=' + mapping.length };
+  }
+
+  var srcSet = new Set();
+  var tgtSet = new Set();
+  mapping.forEach(function(m) {
+    srcSet.add(m.sourceIndex);
+    tgtSet.add(m.targetIndex);
+  });
+
+  var pass = srcSet.size === 16 && tgtSet.size === 16;
+  return {
+    pass: pass,
+    name: 'phase3_mappingBijection',
+    detail: pass
+      ? 'All 16 source and 16 target indices are unique (bijection confirmed)'
+      : 'srcSet.size=' + srcSet.size + ' tgtSet.size=' + tgtSet.size
+  };
+}
+VALIDATIONS.push(validate_phase3_mappingBijection);
+
+// ─── Phase 2 Validations ───
+
+/**
+ * @description Validates PixelBuffer shape for a known 4x4 image.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase2_pixelBufferShape() {
+  const data = new Uint8ClampedArray(4 * 4 * 4);
+  const buf = createPixelBufferFromData(data, 4, 4);
+  const pass = buf.width === 4 && buf.height === 4 && buf.count === 16 && buf.data.length === 64;
+  return {
+    pass: pass,
+    name: 'phase2_pixelBufferShape',
+    detail: pass
+      ? 'PixelBuffer has correct w=4, h=4, count=16, data.length=64'
+      : 'Got w=' + buf.width + ' h=' + buf.height + ' count=' + buf.count + ' data.length=' + buf.data.length
+  };
+}
+VALIDATIONS.push(validate_phase2_pixelBufferShape);
+
+/**
+ * @description Validates cover-crop math for 800x600 into 512x512.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase2_coverCropMath() {
+  const crop = computeCoverCrop(800, 600, 512);
+  const pass = crop.sx === 100 && crop.sy === 0 && crop.sw === 600 && crop.sh === 600;
+  return {
+    pass: pass,
+    name: 'phase2_coverCropMath',
+    detail: pass
+      ? 'Cover crop for 800x600→512: sx=100 sy=0 sw=600 sh=600'
+      : 'Got sx=' + crop.sx + ' sy=' + crop.sy + ' sw=' + crop.sw + ' sh=' + crop.sh
+  };
+}
+VALIDATIONS.push(validate_phase2_coverCropMath);
+
+/**
+ * @description Validates all 5 procedural targets at 8x8.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase2_proceduralTargets() {
+  const errors = [];
+  PROCEDURAL_GENERATORS.forEach(function(gen, idx) {
+    try {
+      var buf = gen.fn(8);
+      if (buf.count !== 64) {
+        errors.push(gen.name + ': count=' + buf.count + ' (expected 64)');
+      }
+      var allSame = true;
+      for (var i = 4; i < buf.data.length; i += 4) {
+        if (buf.data[i] !== buf.data[0] || buf.data[i + 1] !== buf.data[1]) {
+          allSame = false;
+          break;
+        }
+      }
+      if (allSame) {
+        errors.push(gen.name + ': all pixels identical');
+      }
+    } catch (err) {
+      errors.push(gen.name + ': error: ' + err.message);
+    }
+  });
+  var pass = errors.length === 0;
+  return {
+    pass: pass,
+    name: 'phase2_proceduralTargets',
+    detail: pass
+      ? 'All 5 procedural targets generate valid 8x8 non-uniform buffers'
+      : errors.join('; ')
+  };
+}
+VALIDATIONS.push(validate_phase2_proceduralTargets);
+
+// ─── Phase 6 Validations ───
+
+/**
+ * @description Validates that CANVAS_GAP_RATIO and MAX_INFLIGHT exist in CONFIG with correct types.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase6_configKeys() {
+  var hasGap = typeof CONFIG.CANVAS_GAP_RATIO === 'number' && CONFIG.CANVAS_GAP_RATIO > 0 && CONFIG.CANVAS_GAP_RATIO < 1;
+  var hasMax = typeof CONFIG.MAX_INFLIGHT === 'number' && CONFIG.MAX_INFLIGHT > 0 && Number.isInteger(CONFIG.MAX_INFLIGHT);
+  var pass = hasGap && hasMax;
+  return {
+    pass: pass,
+    name: 'phase6_configKeys',
+    detail: pass
+      ? 'CANVAS_GAP_RATIO=' + CONFIG.CANVAS_GAP_RATIO + ' MAX_INFLIGHT=' + CONFIG.MAX_INFLIGHT
+      : 'hasGap=' + hasGap + ' hasMax=' + hasMax
+  };
+}
+VALIDATIONS.push(validate_phase6_configKeys);
+
+/**
+ * @description Validates that buildAnimationArrays offsets targetXY by size+gap.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase6_targetXYOffset() {
+  var size = 4;
+  var gapPx = 2;
+  var mapping = [];
+  for (var i = 0; i < 16; i++) {
+    mapping.push({ sourceIndex: i, targetIndex: 15 - i, r: 0, g: 0, b: 0, a: 255, luminance: 0 });
+  }
+  var arrays = buildAnimationArrays(mapping, size, gapPx);
+  var txForTarget15 = arrays.targetXY[0 * 2];
+  var txForTarget0 = arrays.targetXY[15 * 2];
+  var pass = txForTarget15 === (3 + size + gapPx) && txForTarget0 === (0 + size + gapPx);
+  return {
+    pass: pass,
+    name: 'phase6_targetXYOffset',
+    detail: pass
+      ? 'targetXY x-coords correctly offset by size+gap'
+      : 'Expected tx[0]=' + (3 + size + gapPx) + ' got ' + txForTarget15 +
+        ', tx[15]=' + (0 + size + gapPx) + ' got ' + txForTarget0
+  };
+}
+VALIDATIONS.push(validate_phase6_targetXYOffset);
+
+/**
+ * @description Validates sourceXY coordinates remain in left rectangle (no offset).
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase6_sourceXYNoOffset() {
+  var size = 4;
+  var gapPx = 2;
+  var mapping = [];
+  for (var i = 0; i < 16; i++) {
+    mapping.push({ sourceIndex: i, targetIndex: 15 - i, r: 0, g: 0, b: 0, a: 255, luminance: 0 });
+  }
+  var arrays = buildAnimationArrays(mapping, size, gapPx);
+  var sx0 = arrays.sourceXY[0];
+  var sx15 = arrays.sourceXY[15 * 2];
+  var pass = sx0 === 0 && sx15 === 3;
+  return {
+    pass: pass,
+    name: 'phase6_sourceXYNoOffset',
+    detail: pass
+      ? 'sourceXY x-coords stay in left rectangle (no offset)'
+      : 'Expected sx[0]=0 got ' + sx0 + ', sx[15]=3 got ' + sx15
+  };
+}
+VALIDATIONS.push(validate_phase6_sourceXYNoOffset);
+
+// ─── Phase 7 Validations ───
+
+/**
+ * @description Validates CONFIG has DEFAULT_IMAGE_PATHS (array) and HISTOGRAM_BINS (number).
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase7_configKeys() {
+  var hasPaths = Array.isArray(CONFIG.DEFAULT_IMAGE_PATHS) && CONFIG.DEFAULT_IMAGE_PATHS.length === 15;
+  var hasBins = typeof CONFIG.HISTOGRAM_BINS === 'number' && CONFIG.HISTOGRAM_BINS > 0 && Number.isInteger(CONFIG.HISTOGRAM_BINS);
+  var pass = hasPaths && hasBins;
+  return {
+    pass: pass,
+    name: 'phase7_configKeys',
+    detail: pass
+      ? 'DEFAULT_IMAGE_PATHS has 15 entries, HISTOGRAM_BINS=' + CONFIG.HISTOGRAM_BINS
+      : 'hasPaths=' + hasPaths + ' hasBins=' + hasBins
+  };
+}
+VALIDATIONS.push(validate_phase7_configKeys);
+
+/**
+ * @description Validates buildLuminanceHistogram returns a normalized histogram of correct length.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase7_histogramShape() {
+  var data = new Uint8ClampedArray(16 * 4);
+  for (var i = 0; i < 16; i++) {
+    var v = i * 16;
+    data[i * 4] = v;
+    data[i * 4 + 1] = v;
+    data[i * 4 + 2] = v;
+    data[i * 4 + 3] = 255;
+  }
+  var buf = createPixelBufferFromData(data, 4, 4);
+  var hist = buildLuminanceHistogram(buf);
+  var correctLength = hist.length === CONFIG.HISTOGRAM_BINS;
+  var sum = 0;
+  for (var j = 0; j < hist.length; j++) sum += hist[j];
+  var normalized = Math.abs(sum - 1.0) < 0.001;
+  var pass = correctLength && normalized;
+  return {
+    pass: pass,
+    name: 'phase7_histogramShape',
+    detail: pass
+      ? 'Histogram has ' + CONFIG.HISTOGRAM_BINS + ' bins, sum=' + sum.toFixed(4)
+      : 'length=' + hist.length + ' (expected ' + CONFIG.HISTOGRAM_BINS + '), sum=' + sum.toFixed(4)
+  };
+}
+VALIDATIONS.push(validate_phase7_histogramShape);
+
+/**
+ * @description Validates histogramIntersection returns 1.0 for identical histograms, <1 for different.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase7_histogramDistance() {
+  var histA = new Float64Array(CONFIG.HISTOGRAM_BINS);
+  var histB = new Float64Array(CONFIG.HISTOGRAM_BINS);
+  var histC = new Float64Array(CONFIG.HISTOGRAM_BINS);
+  for (var i = 0; i < CONFIG.HISTOGRAM_BINS; i++) {
+    histA[i] = 1.0 / CONFIG.HISTOGRAM_BINS;
+    histB[i] = 1.0 / CONFIG.HISTOGRAM_BINS;
+    histC[i] = 0;
+  }
+  histC[0] = 1.0;
+  var identical = histogramIntersection(histA, histB);
+  var different = histogramIntersection(histA, histC);
+  var selfScore = Math.abs(identical - 1.0) < 0.001;
+  var lowerScore = different < identical;
+  var pass = selfScore && lowerScore;
+  return {
+    pass: pass,
+    name: 'phase7_histogramDistance',
+    detail: pass
+      ? 'Identical score=' + identical.toFixed(4) + ', different score=' + different.toFixed(4)
+      : 'identical=' + identical.toFixed(4) + ' (expect ~1.0), different=' + different.toFixed(4) + ' (expect < identical)'
+  };
+}
+VALIDATIONS.push(validate_phase7_histogramDistance);
+
+/**
+ * @description Validates that findBestMatchIndex picks the histogram closest to the source.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase7_bestMatchPicking() {
+  var bins = CONFIG.HISTOGRAM_BINS;
+  var source = new Float64Array(bins);
+  for (var i = 0; i < bins; i++) source[i] = 1.0 / bins;
+  var cand0 = new Float64Array(bins);
+  cand0[0] = 1.0;
+  var cand1 = new Float64Array(bins);
+  for (var j = 0; j < bins; j++) cand1[j] = 1.0 / bins;
+  var cand2 = new Float64Array(bins);
+  cand2[0] = 0.5;
+  for (var k = 1; k < bins; k++) cand2[k] = 0.5 / (bins - 1);
+
+  var candidates = [cand0, cand1, cand2];
+  var bestIdx = findBestMatchIndex(source, candidates);
+  var pass = bestIdx === 1;
+  return {
+    pass: pass,
+    name: 'phase7_bestMatchPicking',
+    detail: pass
+      ? 'Correctly picked candidate 1 (identical histogram)'
+      : 'Picked index ' + bestIdx + ' (expected 1)'
+  };
+}
+VALIDATIONS.push(validate_phase7_bestMatchPicking);
+
+// ─── Phase 8 Validations ───
+
+/**
+ * @description Validates that the three custom select elements exist in the DOM.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase8_selectElementsExist() {
+  var ids = ['select-target-mode', 'select-quality', 'select-pattern'];
+  var missing = ids.filter(function(id) { return !document.getElementById(id); });
+  var pass = missing.length === 0;
+  return {
+    pass: pass,
+    name: 'phase8_selectElementsExist',
+    detail: pass
+      ? 'All 3 custom select elements exist'
+      : 'Missing: ' + missing.join(', ')
+  };
+}
+VALIDATIONS.push(validate_phase8_selectElementsExist);
+
+/**
+ * @description Validates default select values match expected defaults.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase8_defaultValues() {
+  var qualitySel = document.getElementById('select-quality');
+  var patternSel = document.getElementById('select-pattern');
+  var targetSel = document.getElementById('select-target-mode');
+  var qualityOk = qualitySel && qualitySel.value === '512';
+  var patternOk = patternSel && patternSel.value === 'luminance_ordered';
+  var targetOk = targetSel && targetSel.value === 'fate';
+  var pass = qualityOk && patternOk && targetOk;
+  return {
+    pass: pass,
+    name: 'phase8_defaultValues',
+    detail: pass
+      ? 'quality=512, pattern=luminance_ordered, target=fate'
+      : 'quality=' + (qualitySel ? qualitySel.value : 'null') +
+        ' pattern=' + (patternSel ? patternSel.value : 'null') +
+        ' target=' + (targetSel ? targetSel.value : 'null')
+  };
+}
+VALIDATIONS.push(validate_phase8_defaultValues);
+
+/**
+ * @description Validates APP_STATE default pattern is luminance_ordered.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase8_appStateDefaults() {
+  var pass = APP_STATE.selectedPattern === 'luminance_ordered';
+  return {
+    pass: pass,
+    name: 'phase8_appStateDefaults',
+    detail: pass
+      ? 'APP_STATE.selectedPattern=luminance_ordered'
+      : 'APP_STATE.selectedPattern=' + APP_STATE.selectedPattern
+  };
+}
+VALIDATIONS.push(validate_phase8_appStateDefaults);
+
+/**
+ * @description Validates the setup options row container exists and has the three select wrappers.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase8_optionsRowExists() {
+  var row = document.querySelector('.setup-options-row');
+  var hasRow = !!row;
+  var childCount = hasRow ? row.querySelectorAll('.custom-select').length : 0;
+  var pass = hasRow && childCount === 3;
+  return {
+    pass: pass,
+    name: 'phase8_optionsRowExists',
+    detail: pass
+      ? 'Options row exists with 3 custom-select wrappers'
+      : 'hasRow=' + hasRow + ' childCount=' + childCount
+  };
+}
+VALIDATIONS.push(validate_phase8_optionsRowExists);
+
+// ─── Phase 9 Validations ───
+
+/**
+ * @description Validates HISTOGRAM_MIN_SCORE exists in CONFIG with correct type and range.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase9_configMinScore() {
+  var has = typeof CONFIG.HISTOGRAM_MIN_SCORE === 'number' &&
+            CONFIG.HISTOGRAM_MIN_SCORE > 0 && CONFIG.HISTOGRAM_MIN_SCORE < 1;
+  return {
+    pass: has,
+    name: 'phase9_configMinScore',
+    detail: has
+      ? 'HISTOGRAM_MIN_SCORE=' + CONFIG.HISTOGRAM_MIN_SCORE
+      : 'Missing or invalid HISTOGRAM_MIN_SCORE'
+  };
+}
+VALIDATIONS.push(validate_phase9_configMinScore);
+
+/**
+ * @description Validates APP_STATE has rankedTargets and rankedTargetIndex fields.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase9_appStateFields() {
+  var hasRanked = 'rankedTargets' in APP_STATE;
+  var hasIndex = 'rankedTargetIndex' in APP_STATE;
+  var pass = hasRanked && hasIndex;
+  return {
+    pass: pass,
+    name: 'phase9_appStateFields',
+    detail: pass
+      ? 'APP_STATE has rankedTargets and rankedTargetIndex'
+      : 'hasRanked=' + hasRanked + ' hasIndex=' + hasIndex
+  };
+}
+VALIDATIONS.push(validate_phase9_appStateFields);
+
+/**
+ * @description Validates btn-retry exists with label "Try Again" and btn-retry id.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase9_tryAgainButton() {
+  var btn = document.getElementById('btn-retry');
+  var exists = !!btn;
+  var labelOk = exists && btn.textContent.trim() === 'Try Again';
+  var pass = exists && labelOk;
+  return {
+    pass: pass,
+    name: 'phase9_tryAgainButton',
+    detail: pass
+      ? 'btn-retry exists with label "Try Again"'
+      : 'exists=' + exists + ' labelOk=' + labelOk
+  };
+}
+VALIDATIONS.push(validate_phase9_tryAgainButton);
+
+/**
+ * @description Validates rankAndFilterDefaults returns sorted, filtered results.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase9_rankAndFilter() {
+  var bins = CONFIG.HISTOGRAM_BINS;
+  var sourceHist = new Float64Array(bins);
+  for (var i = 0; i < bins; i++) sourceHist[i] = 1.0 / bins;
+
+  var cand0 = new Float64Array(bins); cand0[0] = 1.0;
+  var cand1 = new Float64Array(bins);
+  for (var j = 0; j < bins; j++) cand1[j] = 1.0 / bins;
+  var cand2 = new Float64Array(bins);
+  cand2[0] = 0.5;
+  for (var k = 1; k < bins; k++) cand2[k] = 0.5 / (bins - 1);
+
+  var buffers = [{ dummy: 0 }, { dummy: 1 }, { dummy: 2 }];
+  var histograms = [cand0, cand1, cand2];
+
+  var ranked = rankAndFilterDefaults(sourceHist, buffers, histograms);
+  var bestFirst = ranked.length > 0 && ranked[0].buffer.dummy === 1;
+  var pass = bestFirst && ranked.length >= 2;
+  return {
+    pass: pass,
+    name: 'phase9_rankAndFilter',
+    detail: pass
+      ? 'Ranked ' + ranked.length + ' candidates, best match first (idx=1)'
+      : 'ranked.length=' + ranked.length +
+        (ranked.length > 0 ? ' first.dummy=' + ranked[0].buffer.dummy : '')
+  };
+}
+VALIDATIONS.push(validate_phase9_rankAndFilter);
+
+// ─── Validation Runner ───
+
+/**
+ * @description Runs all registered validation functions and logs results.
+ */
+export function runValidations() {
+  const results = VALIDATIONS.map(function(fn) {
+    try {
+      return fn();
+    } catch (err) {
+      return { pass: false, name: fn.name || 'unknown', detail: 'Error: ' + err.message };
+    }
+  });
+  const passed = results.filter(function(r) { return r.pass; }).length;
+  console.log('%c=== VALIDATION RESULTS: ' + passed + '/' + results.length + ' passed ===', 'color: #7f5af0; font-size: 14px;');
+  console.table(results);
+  return results;
+}

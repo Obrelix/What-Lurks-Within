@@ -1,13 +1,17 @@
 <progress>
-  <phase>Phase 10: Extract CSS into separate file</phase>
+  <phase>Phase 11-18: Extract all JS into ES modules</phase>
   <status>COMPLETE</status>
   <last_completed_step>IMPLEMENT</last_completed_step>
   <next_step>COMMIT</next_step>
   <files_read_this_session>index.html, progress.txt, CLAUDE.md</files_read_this_session>
   <plan_summary>
-    Extracted all CSS (~600 lines) from inline style block in index.html into css/styles.css.
-    Replaced the style block with a link tag. No logic changes, pure structural move.
-    index.html dropped from 3036 to 2437 lines.
+    Extracted all JavaScript from index.html into 15 ES module files under js/.
+    Structure: config.js, state.js, utils.js, ui/ (screens, toast, noise, options),
+    image/ (pipeline, procedural, matching), algorithm/ (pixel-alchemy, patterns),
+    animation/ (engine), state-management.js, events.js, main.js, validation/ (validations.js).
+    index.html is now 132 lines of pure HTML. CSS in css/styles.css.
+    Uses native ES modules (script type="module") — no bundler needed.
+    Validations dynamically imported only when ?test=true.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
