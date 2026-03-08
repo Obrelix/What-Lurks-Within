@@ -707,7 +707,27 @@
 
       // Dual-canvas layout
       CANVAS_GAP_RATIO: 0.08,
-      MAX_INFLIGHT: 20000
+      MAX_INFLIGHT: 20000,
+
+      // Default image matching
+      HISTOGRAM_BINS: 32,
+      DEFAULT_IMAGE_PATHS: [
+        'defaultImages/img1.jpg',
+        'defaultImages/img2.jpg',
+        'defaultImages/img3.jpg',
+        'defaultImages/img4.jpg',
+        'defaultImages/img5.jpg',
+        'defaultImages/img6.jpg',
+        'defaultImages/img7.jpg',
+        'defaultImages/img8.jpeg',
+        'defaultImages/img9.jpg',
+        'defaultImages/img10.jpg',
+        'defaultImages/img11.jpg',
+        'defaultImages/img12.jpg',
+        'defaultImages/img13.jpg',
+        'defaultImages/img14.jpg',
+        'defaultImages/img15.png'
+      ]
     };
 
     // ═══════════════════════════════════════════
@@ -1210,6 +1230,125 @@
     function generateRandomTarget(size) {
       const idx = Math.floor(Math.random() * PROCEDURAL_GENERATORS.length);
       return PROCEDURAL_GENERATORS[idx].fn(size);
+    }
+
+    // ═══════════════════════════════════════════
+    // DEFAULT IMAGE MATCHING (LUMINANCE HISTOGRAM)
+    // ═══════════════════════════════════════════
+
+    /**
+     * @description Builds a normalized luminance histogram from a PixelBuffer.
+     * @param {{ data: Uint8ClampedArray, count: number }} buffer - Pixel buffer
+     * @returns {Float64Array} Normalized histogram of length CONFIG.HISTOGRAM_BINS
+     */
+    function buildLuminanceHistogram(buffer) {
+      var bins = CONFIG.HISTOGRAM_BINS;
+      var hist = new Float64Array(bins);
+      var data = buffer.data;
+      var count = buffer.count;
+
+      for (var i = 0; i < count; i++) {
+        var off = i * 4;
+        var lum = 0.299 * data[off] + 0.587 * data[off + 1] + 0.114 * data[off + 2];
+        var bin = Math.min(bins - 1, Math.floor(lum / 256 * bins));
+        hist[bin]++;
+      }
+
+      // Normalize so sum = 1.0
+      for (var j = 0; j < bins; j++) {
+        hist[j] /= count;
+      }
+
+      return hist;
+    }
+
+    /**
+     * @description Computes histogram intersection similarity (0 = no overlap, 1 = identical).
+     * @param {Float64Array} histA - First normalized histogram
+     * @param {Float64Array} histB - Second normalized histogram
+     * @returns {number} Similarity score (0 to 1)
+     */
+    function histogramIntersection(histA, histB) {
+      var sum = 0;
+      for (var i = 0; i < histA.length; i++) {
+        sum += Math.min(histA[i], histB[i]);
+      }
+      return sum;
+    }
+
+    /**
+     * @description Finds the index of the candidate histogram most similar to the source.
+     * @param {Float64Array} sourceHist - Source luminance histogram
+     * @param {Array<Float64Array>} candidateHists - Array of candidate histograms
+     * @returns {number} Index of the best match
+     */
+    function findBestMatchIndex(sourceHist, candidateHists) {
+      var bestIdx = 0;
+      var bestScore = -1;
+      for (var i = 0; i < candidateHists.length; i++) {
+        var score = histogramIntersection(sourceHist, candidateHists[i]);
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = i;
+        }
+      }
+      return bestIdx;
+    }
+
+    /**
+     * @description Loads an image from a URL path and returns a Promise resolving to an HTMLImageElement.
+     * @param {string} path - Relative or absolute image path
+     * @returns {Promise<HTMLImageElement>}
+     */
+    function loadImageFromPath(path) {
+      return new Promise(function(resolve, reject) {
+        var img = new Image();
+        img.onload = function() { resolve(img); };
+        img.onerror = function() { reject(new Error('Failed to load: ' + path)); };
+        img.src = path;
+      });
+    }
+
+    /**
+     * @description Loads all default images, computes histograms, and returns the best-matching PixelBuffer.
+     *              Falls back to procedural generation if loading fails.
+     * @param {{ data: Uint8ClampedArray, count: number, width: number, height: number }} sourceBuffer - Source pixel buffer
+     * @param {number} resolution - Target square dimension
+     * @returns {Promise<{ width: number, height: number, data: Uint8ClampedArray, count: number }>}
+     */
+    async function loadBestMatchingDefaultImage(sourceBuffer, resolution) {
+      var paths = CONFIG.DEFAULT_IMAGE_PATHS;
+      var sourceHist = buildLuminanceHistogram(sourceBuffer);
+
+      // Load all default images in parallel
+      var loadPromises = paths.map(function(path) {
+        return loadImageFromPath(path).then(function(img) {
+          var buf = createPixelBuffer(img, resolution);
+          return { buffer: buf, histogram: buildLuminanceHistogram(buf) };
+        }).catch(function() {
+          return null; // Mark failed loads
+        });
+      });
+
+      var results = await Promise.all(loadPromises);
+
+      // Filter out failed loads
+      var loaded = [];
+      var histograms = [];
+      for (var i = 0; i < results.length; i++) {
+        if (results[i] !== null) {
+          loaded.push(results[i].buffer);
+          histograms.push(results[i].histogram);
+        }
+      }
+
+      // If no images loaded, fall back to procedural
+      if (loaded.length === 0) {
+        return generateRandomTarget(resolution);
+      }
+
+      var bestIdx = findBestMatchIndex(sourceHist, histograms);
+      return loaded[bestIdx];
     }
 
     // ═══════════════════════════════════════════
@@ -1798,11 +1937,21 @@
 
       // Reveal button
       const btnReveal = document.getElementById('btn-reveal');
-      btnReveal?.addEventListener('click', function() {
+      btnReveal?.addEventListener('click', async function() {
         if (!APP_STATE.sourceBuffer) return;
-        // Generate procedural target if fate mode
+        // Load best-matching default image if fate mode
         if (APP_STATE.targetMode === 'fate') {
-          APP_STATE.targetBuffer = generateRandomTarget(APP_STATE.selectedResolution);
+          var overlay = document.getElementById('processing-overlay');
+          if (overlay) overlay.classList.add('active');
+          try {
+            APP_STATE.targetBuffer = await loadBestMatchingDefaultImage(
+              APP_STATE.sourceBuffer, APP_STATE.selectedResolution
+            );
+          } catch (err) {
+            // Fallback to procedural generation
+            APP_STATE.targetBuffer = generateRandomTarget(APP_STATE.selectedResolution);
+          }
+          if (overlay) overlay.classList.remove('active');
         }
         if (!APP_STATE.targetBuffer) {
           showToast('No target image available.', 'error');
@@ -1998,12 +2147,14 @@
         'ARC_MAGNITUDE', 'COMPLETION_DELAY_MS',
         'LUMINANCE_BAND_WIDTH',
         'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS', 'PROCEDURAL_TARGET_COUNT',
-        'CANVAS_GAP_RATIO', 'MAX_INFLIGHT'
+        'CANVAS_GAP_RATIO', 'MAX_INFLIGHT',
+        'HISTOGRAM_BINS', 'DEFAULT_IMAGE_PATHS'
       ];
       var missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
       var wrongType = expectedKeys.filter(function(k) {
         if (!(k in CONFIG)) return false;
         if (k.startsWith('COLOR_')) return typeof CONFIG[k] !== 'string';
+        if (k === 'DEFAULT_IMAGE_PATHS') return !Array.isArray(CONFIG[k]);
         return typeof CONFIG[k] !== 'number';
       });
       var pass = missing.length === 0 && wrongType.length === 0;
@@ -2449,6 +2600,122 @@
       };
     }
     VALIDATIONS.push(validate_phase6_sourceXYNoOffset);
+
+    // ─── Phase 7 Validations ───
+
+    /**
+     * @description Validates CONFIG has DEFAULT_IMAGE_PATHS (array) and HISTOGRAM_BINS (number).
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase7_configKeys() {
+      var hasPaths = Array.isArray(CONFIG.DEFAULT_IMAGE_PATHS) && CONFIG.DEFAULT_IMAGE_PATHS.length === 15;
+      var hasBins = typeof CONFIG.HISTOGRAM_BINS === 'number' && CONFIG.HISTOGRAM_BINS > 0 && Number.isInteger(CONFIG.HISTOGRAM_BINS);
+      var pass = hasPaths && hasBins;
+      return {
+        pass: pass,
+        name: 'phase7_configKeys',
+        detail: pass
+          ? 'DEFAULT_IMAGE_PATHS has 15 entries, HISTOGRAM_BINS=' + CONFIG.HISTOGRAM_BINS
+          : 'hasPaths=' + hasPaths + ' hasBins=' + hasBins
+      };
+    }
+    VALIDATIONS.push(validate_phase7_configKeys);
+
+    /**
+     * @description Validates buildLuminanceHistogram returns a normalized histogram of correct length.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase7_histogramShape() {
+      // Create a 4x4 buffer with known luminance values
+      var data = new Uint8ClampedArray(16 * 4);
+      for (var i = 0; i < 16; i++) {
+        var v = i * 16; // luminance values 0..240
+        data[i * 4] = v;
+        data[i * 4 + 1] = v;
+        data[i * 4 + 2] = v;
+        data[i * 4 + 3] = 255;
+      }
+      var buf = createPixelBufferFromData(data, 4, 4);
+      var hist = buildLuminanceHistogram(buf);
+      var correctLength = hist.length === CONFIG.HISTOGRAM_BINS;
+      // Sum should be ~1.0 (normalized)
+      var sum = 0;
+      for (var j = 0; j < hist.length; j++) sum += hist[j];
+      var normalized = Math.abs(sum - 1.0) < 0.001;
+      var pass = correctLength && normalized;
+      return {
+        pass: pass,
+        name: 'phase7_histogramShape',
+        detail: pass
+          ? 'Histogram has ' + CONFIG.HISTOGRAM_BINS + ' bins, sum=' + sum.toFixed(4)
+          : 'length=' + hist.length + ' (expected ' + CONFIG.HISTOGRAM_BINS + '), sum=' + sum.toFixed(4)
+      };
+    }
+    VALIDATIONS.push(validate_phase7_histogramShape);
+
+    /**
+     * @description Validates histogramIntersection returns 1.0 for identical histograms, <1 for different.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase7_histogramDistance() {
+      var histA = new Float64Array(CONFIG.HISTOGRAM_BINS);
+      var histB = new Float64Array(CONFIG.HISTOGRAM_BINS);
+      var histC = new Float64Array(CONFIG.HISTOGRAM_BINS);
+      // Identical histograms
+      for (var i = 0; i < CONFIG.HISTOGRAM_BINS; i++) {
+        histA[i] = 1.0 / CONFIG.HISTOGRAM_BINS;
+        histB[i] = 1.0 / CONFIG.HISTOGRAM_BINS;
+        histC[i] = 0;
+      }
+      // Completely different histogram — all weight in one bin
+      histC[0] = 1.0;
+      var identical = histogramIntersection(histA, histB);
+      var different = histogramIntersection(histA, histC);
+      var selfScore = Math.abs(identical - 1.0) < 0.001;
+      var lowerScore = different < identical;
+      var pass = selfScore && lowerScore;
+      return {
+        pass: pass,
+        name: 'phase7_histogramDistance',
+        detail: pass
+          ? 'Identical score=' + identical.toFixed(4) + ', different score=' + different.toFixed(4)
+          : 'identical=' + identical.toFixed(4) + ' (expect ~1.0), different=' + different.toFixed(4) + ' (expect < identical)'
+      };
+    }
+    VALIDATIONS.push(validate_phase7_histogramDistance);
+
+    /**
+     * @description Validates that findBestMatchIndex picks the histogram closest to the source.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase7_bestMatchPicking() {
+      var bins = CONFIG.HISTOGRAM_BINS;
+      // Source: uniform distribution
+      var source = new Float64Array(bins);
+      for (var i = 0; i < bins; i++) source[i] = 1.0 / bins;
+      // Candidate 0: all weight in bin 0 (very different)
+      var cand0 = new Float64Array(bins);
+      cand0[0] = 1.0;
+      // Candidate 1: uniform (identical to source)
+      var cand1 = new Float64Array(bins);
+      for (var j = 0; j < bins; j++) cand1[j] = 1.0 / bins;
+      // Candidate 2: half weight in bin 0, rest spread
+      var cand2 = new Float64Array(bins);
+      cand2[0] = 0.5;
+      for (var k = 1; k < bins; k++) cand2[k] = 0.5 / (bins - 1);
+
+      var candidates = [cand0, cand1, cand2];
+      var bestIdx = findBestMatchIndex(source, candidates);
+      var pass = bestIdx === 1;
+      return {
+        pass: pass,
+        name: 'phase7_bestMatchPicking',
+        detail: pass
+          ? 'Correctly picked candidate 1 (identical histogram)'
+          : 'Picked index ' + bestIdx + ' (expected 1)'
+      };
+    }
+    VALIDATIONS.push(validate_phase7_bestMatchPicking);
 
     // ─── Validation Runner ───
 

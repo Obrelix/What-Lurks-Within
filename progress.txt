@@ -1,17 +1,19 @@
 <progress>
-  <phase>Phase 6: Dual-Canvas Animation with Particle Flight</phase>
-  <status>COMPLETE</status>
-  <last_completed_step>VERIFY END-TO-END</last_completed_step>
-  <next_step>COMMIT</next_step>
-  <files_read_this_session>index.html, progress.txt, CLAUDE.md</files_read_this_session>
+  <phase>Phase 7: Default Image Selection by Luminance Histogram Similarity</phase>
+  <status>IN PROGRESS</status>
+  <last_completed_step>THINK HARD</last_completed_step>
+  <next_step>WRITE VALIDATIONS FIRST</next_step>
+  <files_read_this_session>index.html, progress.txt, defaultImages/ directory listing</files_read_this_session>
   <plan_summary>
-    Redesigned the animation screen to show two side-by-side rectangles (source left, target right)
-    within a single wide canvas. Source image drains as pixels leave; target fills as they arrive.
-    In-flight pixels arc through a gap between the two rectangles. Replaced batch release system
-    with continuous time-based release where each pixel gets a unique staggered start time,
-    eliminating the glitchy wave effect. Increased tween duration to 1500ms for slower visible
-    travel. Added TARGET_DURATION_S for consistent animation time across resolutions. Result
-    screen extracts only the target image from the right side of the animation canvas.
+    Replace the procedural random target generator in "fate" mode with a system that loads
+    15 default images from defaultImages/, computes luminance histograms for each and the
+    source image, then picks the most similar match using histogram intersection distance.
+    On-demand loading: images are fetched only when Reveal is clicked. Procedural generators
+    remain as fallback if image loading fails (e.g. file:// CORS or missing files).
+    Changes touch: CONFIG (add DEFAULT_IMAGE_PATHS, HISTOGRAM_BINS), the "fate" branch inside
+    the Reveal button handler, and a new "Default Image Matching" section with functions for
+    histogram computation, comparison, and image loading. The selection remains a mystery to
+    the user — no UI indication of which image was chosen.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
