@@ -7,6 +7,7 @@ import { showScreen } from '../ui/screens.js';
 import { showToast } from '../ui/toast.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
+import { startRecording, stopRecording } from '../video/recorder.js';
 
 // ═══════════════════════════════════════════
 // ANIMATION ENGINE
@@ -106,6 +107,7 @@ export function startReveal() {
 
       if (overlay) overlay.classList.remove('active');
       showScreen('animation');
+      startRecording(canvas);
       APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
     } catch (err) {
       if (overlay) overlay.classList.remove('active');
@@ -222,6 +224,8 @@ export function finishAnimation() {
     cancelAnimationFrame(APP_STATE.animationFrameId);
     APP_STATE.animationFrameId = null;
   }
+
+  stopRecording();
 
   var animCanvas = document.getElementById('animation-canvas');
   var resultCanvas = document.getElementById('result-canvas');

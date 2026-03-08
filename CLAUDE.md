@@ -25,7 +25,7 @@ js/
   state.js              (APP_STATE mutable singleton)
   utils.js              (pure functions: luminance, hue, easing, shuffle, comparator)
   events.js             (initEvents — wires all buttons, drag-and-drop, file inputs)
-  state-management.js   (resetState, downloadResult, tryAgain)
+  state-management.js   (resetState, downloadResult, downloadVideo, tryAgain)
   ui/
     screens.js          (showScreen)
     toast.js            (showToast)
@@ -40,6 +40,8 @@ js/
     patterns.js         (sortMappingByPattern — spatial sweep, random, luminance, spiral)
   animation/
     engine.js           (buildAnimationArrays, startReveal, animationLoop, finishAnimation)
+  video/
+    recorder.js         (startRecording, stopRecording — MediaRecorder + captureStream)
   validation/
     validations.js      (all validation functions — dynamically imported with ?test=true)
 ```
@@ -60,7 +62,8 @@ image/procedural → image/pipeline
 image/matching → config, state, image/pipeline, image/procedural
 algorithm/pixel-alchemy → utils
 algorithm/patterns → utils
-animation/engine → config, state, utils, ui/screens, ui/toast, algorithm/*
+animation/engine → config, state, utils, ui/screens, ui/toast, algorithm/*, video/recorder
+video/recorder → config, state, ui/toast
 state-management → config, state, ui/screens, ui/toast, animation/engine
 events → state, ui/*, image/*, animation/engine, state-management
 ```

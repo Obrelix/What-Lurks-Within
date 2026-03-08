@@ -43,6 +43,14 @@ export function resetState() {
   APP_STATE.rankedTargets = null;
   APP_STATE.rankedTargetIndex = 0;
 
+  if (APP_STATE.mediaRecorder && APP_STATE.mediaRecorder.state !== 'inactive') {
+    APP_STATE.mediaRecorder.stop();
+  }
+  APP_STATE.mediaRecorder = null;
+  APP_STATE.recordedChunks = [];
+  var videoBtn = document.getElementById('btn-download-video');
+  if (videoBtn) videoBtn.disabled = true;
+
   var preview = document.getElementById('source-preview');
   if (preview) { preview.src = ''; preview.classList.add('hidden'); }
   var tgtPreview = document.getElementById('target-preview');
@@ -81,6 +89,29 @@ export function downloadResult() {
 }
 
 /**
+ * @description Downloads the recorded animation as a WebM video file.
+ */
+export function downloadVideo() {
+  if (!APP_STATE.recordedChunks || APP_STATE.recordedChunks.length === 0) {
+    showToast('No video recorded yet.', 'error');
+    return;
+  }
+  try {
+    var blob = new Blob(APP_STATE.recordedChunks, { type: 'video/webm' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'what-lurks-within-' + Date.now() + '.webm';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast('Video download failed: ' + err.message, 'error');
+  }
+}
+
+/**
  * @description Re-runs the reveal. In fate mode, cycles to the next ranked default image.
  *              In custom mode, re-runs with the same custom target.
  */
@@ -89,6 +120,9 @@ export function tryAgain() {
     cancelAnimationFrame(APP_STATE.animationFrameId);
     APP_STATE.animationFrameId = null;
   }
+
+  var videoBtn = document.getElementById('btn-download-video');
+  if (videoBtn) videoBtn.disabled = true;
 
   if (APP_STATE.targetMode === 'fate' && APP_STATE.rankedTargets && APP_STATE.rankedTargets.length > 0) {
     APP_STATE.rankedTargetIndex = (APP_STATE.rankedTargetIndex + 1) % APP_STATE.rankedTargets.length;

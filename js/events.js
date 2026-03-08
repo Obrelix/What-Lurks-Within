@@ -7,7 +7,7 @@ import { handleSourceUpload, handleTargetUpload, updateRevealButton } from './im
 import { generateRandomTarget } from './image/procedural.js';
 import { loadBestMatchingDefaultImage } from './image/matching.js';
 import { startReveal } from './animation/engine.js';
-import { resetState, downloadResult, tryAgain } from './state-management.js';
+import { resetState, downloadResult, downloadVideo, tryAgain } from './state-management.js';
 
 // ═══════════════════════════════════════════
 // EVENT LISTENERS
@@ -137,6 +137,9 @@ export function initEvents() {
   // ─── Result screen buttons ───
   var btnDownload = document.getElementById('btn-download');
   btnDownload?.addEventListener('click', downloadResult);
+
+  var btnDownloadVideo = document.getElementById('btn-download-video');
+  btnDownloadVideo?.addEventListener('click', downloadVideo);
 
   var btnRetry = document.getElementById('btn-retry');
   btnRetry?.addEventListener('click', tryAgain);

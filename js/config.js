@@ -53,6 +53,10 @@ export const CONFIG = {
   // Default image matching
   HISTOGRAM_MIN_SCORE: 0.3,
   HISTOGRAM_BINS: 32,
+  // Video recording
+  VIDEO_FRAMERATE: 30,
+  VIDEO_MIME_TYPE: 'video/webm;codecs=vp9',
+
   DEFAULT_IMAGE_PATHS: [
     'defaultImages/img1.jpg',
     'defaultImages/img2.jpg',

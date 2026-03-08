@@ -823,6 +823,83 @@ function validate_phase9_rankAndFilter() {
 }
 VALIDATIONS.push(validate_phase9_rankAndFilter);
 
+// ─── Phase 12 Validations ───
+
+/**
+ * @description Validates CONFIG has VIDEO_FRAMERATE and VIDEO_MIME_TYPE with correct types.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase12_configVideoKeys() {
+  var hasFps = typeof CONFIG.VIDEO_FRAMERATE === 'number' && CONFIG.VIDEO_FRAMERATE > 0;
+  var hasMime = typeof CONFIG.VIDEO_MIME_TYPE === 'string' && CONFIG.VIDEO_MIME_TYPE.length > 0;
+  var pass = hasFps && hasMime;
+  return {
+    pass: pass,
+    name: 'phase12_configVideoKeys',
+    detail: pass
+      ? 'VIDEO_FRAMERATE=' + CONFIG.VIDEO_FRAMERATE + ' VIDEO_MIME_TYPE=' + CONFIG.VIDEO_MIME_TYPE
+      : 'hasFps=' + hasFps + ' hasMime=' + hasMime
+  };
+}
+VALIDATIONS.push(validate_phase12_configVideoKeys);
+
+/**
+ * @description Validates APP_STATE has mediaRecorder and recordedChunks fields.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase12_appStateVideoFields() {
+  var hasRecorder = 'mediaRecorder' in APP_STATE;
+  var hasChunks = 'recordedChunks' in APP_STATE;
+  var pass = hasRecorder && hasChunks;
+  return {
+    pass: pass,
+    name: 'phase12_appStateVideoFields',
+    detail: pass
+      ? 'APP_STATE has mediaRecorder and recordedChunks'
+      : 'hasRecorder=' + hasRecorder + ' hasChunks=' + hasChunks
+  };
+}
+VALIDATIONS.push(validate_phase12_appStateVideoFields);
+
+/**
+ * @description Validates Download Final Image button exists with correct text.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase12_downloadButtonRenamed() {
+  var btn = document.getElementById('btn-download');
+  var exists = !!btn;
+  var labelOk = exists && btn.textContent.trim() === 'Download Final Image';
+  var pass = exists && labelOk;
+  return {
+    pass: pass,
+    name: 'phase12_downloadButtonRenamed',
+    detail: pass
+      ? 'btn-download has label "Download Final Image"'
+      : 'exists=' + exists + ' label=' + (exists ? btn.textContent.trim() : 'N/A')
+  };
+}
+VALIDATIONS.push(validate_phase12_downloadButtonRenamed);
+
+/**
+ * @description Validates Download Video button exists and is initially disabled.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase12_downloadVideoButton() {
+  var btn = document.getElementById('btn-download-video');
+  var exists = !!btn;
+  var labelOk = exists && btn.textContent.trim() === 'Download Video';
+  var disabledOk = exists && btn.disabled === true;
+  var pass = exists && labelOk && disabledOk;
+  return {
+    pass: pass,
+    name: 'phase12_downloadVideoButton',
+    detail: pass
+      ? 'btn-download-video exists, labeled "Download Video", initially disabled'
+      : 'exists=' + exists + ' labelOk=' + labelOk + ' disabledOk=' + disabledOk
+  };
+}
+VALIDATIONS.push(validate_phase12_downloadVideoButton);
+
 // ─── Validation Runner ───
 
 /**

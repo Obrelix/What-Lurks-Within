@@ -32,5 +32,9 @@ export const APP_STATE = {
 
   // Ranked default image targets (Phase 9)
   rankedTargets: null,
-  rankedTargetIndex: 0
+  rankedTargetIndex: 0,
+
+  // Video recording (Phase 12)
+  mediaRecorder: null,
+  recordedChunks: []
 };

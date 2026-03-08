@@ -1,17 +1,18 @@
 <progress>
-  <phase>Phase 11-18: Extract all JS into ES modules</phase>
-  <status>COMPLETE</status>
+  <phase>Phase 12: Download Video (MediaRecorder + captureStream)</phase>
+  <status>IN PROGRESS</status>
   <last_completed_step>IMPLEMENT</last_completed_step>
-  <next_step>COMMIT</next_step>
-  <files_read_this_session>index.html, progress.txt, CLAUDE.md</files_read_this_session>
+  <next_step>VERIFY END-TO-END</next_step>
+  <files_read_this_session>index.html, js/config.js, js/state.js, js/animation/engine.js, js/state-management.js, js/events.js, css/styles.css, js/validation/validations.js, CLAUDE.md, progress.txt</files_read_this_session>
   <plan_summary>
-    Extracted all JavaScript from index.html into 15 ES module files under js/.
-    Structure: config.js, state.js, utils.js, ui/ (screens, toast, noise, options),
-    image/ (pipeline, procedural, matching), algorithm/ (pixel-alchemy, patterns),
-    animation/ (engine), state-management.js, events.js, main.js, validation/ (validations.js).
-    index.html is now 132 lines of pure HTML. CSS in css/styles.css.
-    Uses native ES modules (script type="module") — no bundler needed.
-    Validations dynamically imported only when ?test=true.
+    Renamed "Download Result" to "Download Final Image". Added "Download Video" button (disabled by
+    default, enabled after animation completes). Created js/video/recorder.js with startRecording()
+    and stopRecording() using canvas.captureStream() + MediaRecorder (WebM/VP9). Recording starts
+    in startReveal() and stops in finishAnimation(). downloadVideo() in state-management.js creates
+    a Blob from recorded chunks and triggers download. resetState() and tryAgain() clear/reset
+    recording state. CONFIG gets VIDEO_FRAMERATE and VIDEO_MIME_TYPE. APP_STATE gets mediaRecorder
+    and recordedChunks fields. Validations added for all new CONFIG keys, APP_STATE fields, and
+    button presence/labels.
   </plan_summary>
   <blockers>none</blockers>
 </progress>

@@ -9,7 +9,7 @@ Every photo hides another.
 1. **Upload** any photograph
 2. **Choose a target** — pick a built-in image, upload your own, or let fate decide
 3. **Watch** as every pixel migrates from its original position to its new home
-4. **Download** the result — built entirely from your photo's colours
+4. **Download** the final image or a video of the full animation
 
 The core algorithm sorts pixels by luminance and hue, then creates a bijective mapping between source and target positions. Pixels with similar brightness in your photo get assigned to matching regions in the target image, producing a recognizable result using only the original colour palette.
 
@@ -21,7 +21,7 @@ The core algorithm sorts pixels by luminance and hue, then creates a bijective m
 - **Procedural targets** — concentric circles, diagonal gradient, checkerboard, spiral, and radial burst generators
 - **Histogram matching** — "I'm feeling lucky" mode selects the best-matching default image based on your photo's colour distribution
 - **CRT aesthetic** — dark theme with scanline overlay, VHS noise canvas, and glitch text animations
-- **Downloadable results** — save the final image as PNG
+- **Downloadable results** — save the final image as PNG or download a WebM video of the full animation (via MediaRecorder + `captureStream`)
 
 ## Quick Start
 
@@ -54,6 +54,7 @@ js/
   image/                    Image pipeline, procedural generators, histogram matching
   algorithm/                Pixel mapping (luminance+hue sort) and animation patterns
   animation/                Animation engine (typed arrays, requestAnimationFrame loop)
+  video/                    Video recorder (MediaRecorder + captureStream)
   validation/               Validation suite (loaded via ?test=true)
 defaultImages/              15 built-in target images
 ```
@@ -67,7 +68,7 @@ The app uses a 4-screen state machine:
 - **Landing** — Title with glitch animation, "Upload Your Photo" CTA, "How It Works" modal
 - **Setup** — Source preview, target mode selection, resolution picker (256/512/768), animation pattern picker
 - **Animation** — Canvas-based pixel migration with progress bar
-- **Result** — Final image, download button, try again, start over
+- **Result** — Final image, download image/video, try again, start over
 
 ## Resolution Options
 
@@ -93,7 +94,7 @@ npx serve . -p 3000
 ## Tech Stack
 
 - Vanilla JavaScript (ES modules)
-- HTML5 Canvas API
+- HTML5 Canvas API + MediaRecorder API
 - CSS custom properties + `@keyframes` animations
 - Google Fonts (Share Tech Mono)
 
