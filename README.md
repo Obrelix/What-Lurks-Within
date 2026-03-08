@@ -2,6 +2,8 @@
 
 Every photo hides another.
 
+**[Try it live](https://obrelix.github.io/What-Lurks-Within/)**
+
 **What Lurks Within** is a browser-based pixel art experiment that takes every pixel from your uploaded photograph and rearranges them to recreate a completely different image. No pixels are added or removed — only their positions change. You watch the migration happen in real time.
 
 ## How It Works
