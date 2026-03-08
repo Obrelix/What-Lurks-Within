@@ -349,8 +349,8 @@
       image-rendering: pixelated;
       image-rendering: crisp-edges;
       border: 1px solid rgba(127, 90, 240, 0.2);
-      max-width: 90vw;
-      max-height: 70vh;
+      max-width: 95vw;
+      max-height: 65vh;
     }
 
     .progress-bar-container {
@@ -688,11 +688,10 @@
       NOISE_FPS: 12,
 
       // Animation
-      BATCH_PERCENT: 0.005,
-      BATCH_INTERVAL_MS: 16,
-      TWEEN_DURATION_MS: 600,
+      TWEEN_DURATION_MS: 1500,
       ARC_MAGNITUDE: 15,
       COMPLETION_DELAY_MS: 500,
+      TARGET_DURATION_S: 18,
 
       // Pixel algorithm
       LUMINANCE_BAND_WIDTH: 8,
@@ -704,7 +703,11 @@
       TOAST_DURATION_MS: 4000,
 
       // Procedural target count
-      PROCEDURAL_TARGET_COUNT: 5
+      PROCEDURAL_TARGET_COUNT: 5,
+
+      // Dual-canvas layout
+      CANVAS_GAP_RATIO: 0.08,
+      MAX_INFLIGHT: 20000
     };
 
     // ═══════════════════════════════════════════
@@ -728,7 +731,12 @@
       sourceXY: null,
       targetXY: null,
       colors: null,
-      startTimes: null
+      startTimes: null,
+
+      // Dual-canvas layout (allocated in Phase 6)
+      animImageSize: null,
+      animGapPx: null,
+      pixelsPerMs: 0
     };
 
     // ═══════════════════════════════════════════
@@ -1400,21 +1408,23 @@
     /**
      * @description Builds pre-allocated typed arrays for the animation loop.
      * @param {Array} mapping - The pixel mapping array
-     * @param {number} width - Canvas width
+     * @param {number} width - Image width (square dimension)
+     * @param {number} gapPx - Gap width in pixels between source and target rectangles
      * @returns {{ sourceXY: Float32Array, targetXY: Float32Array, colors: Uint8ClampedArray, startTimes: Float64Array }}
      */
-    function buildAnimationArrays(mapping, width) {
+    function buildAnimationArrays(mapping, width, gapPx) {
       var count = mapping.length;
       var sourceXY = new Float32Array(count * 2);
       var targetXY = new Float32Array(count * 2);
       var colors = new Uint8ClampedArray(count * 4);
       var startTimes = new Float64Array(count);
+      var targetOffsetX = width + gapPx;
 
       for (var i = 0; i < count; i++) {
         var m = mapping[i];
         sourceXY[i * 2] = m.sourceIndex % width;
         sourceXY[i * 2 + 1] = Math.floor(m.sourceIndex / width);
-        targetXY[i * 2] = m.targetIndex % width;
+        targetXY[i * 2] = (m.targetIndex % width) + targetOffsetX;
         targetXY[i * 2 + 1] = Math.floor(m.targetIndex / width);
         colors[i * 4] = m.r;
         colors[i * 4 + 1] = m.g;
@@ -1457,35 +1467,44 @@
 
           APP_STATE.mapping = mapping;
 
-          // Build typed arrays
-          var arrays = buildAnimationArrays(mapping, srcBuf.width);
+          // Compute gap and build typed arrays with target offset
+          var size = srcBuf.width;
+          var gapPx = Math.max(1, Math.round(size * CONFIG.CANVAS_GAP_RATIO));
+          var canvasWidth = size * 2 + gapPx;
+          var arrays = buildAnimationArrays(mapping, size, gapPx);
           APP_STATE.sourceXY = arrays.sourceXY;
           APP_STATE.targetXY = arrays.targetXY;
           APP_STATE.colors = arrays.colors;
           APP_STATE.startTimes = arrays.startTimes;
+          APP_STATE.animImageSize = size;
+          APP_STATE.animGapPx = gapPx;
 
-          // Setup canvas
+          // Setup canvas — dual rectangles side by side with gap
           var canvas = document.getElementById('animation-canvas');
           if (!canvas) {
             showToast('Animation canvas not found.', 'error');
             if (overlay) overlay.classList.remove('active');
             return;
           }
-          canvas.width = srcBuf.width;
-          canvas.height = srcBuf.height;
+          canvas.width = canvasWidth;
+          canvas.height = size;
 
-          // Set CSS display size for comfortable viewing
-          var displaySize = Math.min(
-            Math.floor(window.innerWidth * 0.85),
-            Math.floor(window.innerHeight * 0.65)
-          );
-          canvas.style.width = displaySize + 'px';
-          canvas.style.height = displaySize + 'px';
+          // Set CSS display size — fit within viewport, maintaining ~2:1 aspect ratio
+          var maxW = Math.floor(window.innerWidth * 0.95);
+          var maxH = Math.floor(window.innerHeight * 0.65);
+          var aspectRatio = canvasWidth / size;
+          var displayW = Math.min(maxW, Math.floor(maxH * aspectRatio));
+          var displayH = Math.floor(displayW / aspectRatio);
+          canvas.style.width = displayW + 'px';
+          canvas.style.height = displayH + 'px';
+
+          // Compute continuous release rate so animation takes ~TARGET_DURATION_S
+          var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - CONFIG.TWEEN_DURATION_MS);
+          APP_STATE.pixelsPerMs = mapping.length / departureMs;
 
           APP_STATE.animationStartTime = null;
           APP_STATE.animBatchIndex = 0;
           APP_STATE.animSettled = 0;
-          APP_STATE.animLastBatchTime = 0;
 
           if (overlay) overlay.classList.remove('active');
           showScreen('animation');
@@ -1506,7 +1525,6 @@
 
       if (!APP_STATE.animationStartTime) {
         APP_STATE.animationStartTime = timestamp;
-        APP_STATE.animLastBatchTime = timestamp;
       }
 
       var canvas = document.getElementById('animation-canvas');
@@ -1514,8 +1532,8 @@
       var ctx = canvas.getContext('2d');
       if (!ctx) return;
 
-      var width = canvas.width;
-      var height = canvas.height;
+      var canvasWidth = canvas.width;
+      var canvasHeight = canvas.height;
       var count = APP_STATE.mapping.length;
       var sourceXY = APP_STATE.sourceXY;
       var targetXY = APP_STATE.targetXY;
@@ -1523,21 +1541,21 @@
       var startTimes = APP_STATE.startTimes;
       var tweenDur = CONFIG.TWEEN_DURATION_MS;
 
-      // Release new batches
-      var batchSize = Math.ceil(count * CONFIG.BATCH_PERCENT);
-      if (timestamp - APP_STATE.animLastBatchTime >= CONFIG.BATCH_INTERVAL_MS) {
-        var end = Math.min(APP_STATE.animBatchIndex + batchSize, count);
-        for (var b = APP_STATE.animBatchIndex; b < end; b++) {
-          if (startTimes[b] === 0) {
-            startTimes[b] = timestamp;
-          }
-        }
-        APP_STATE.animBatchIndex = end;
-        APP_STATE.animLastBatchTime = timestamp;
+      // Continuous release — each pixel gets a unique staggered start time
+      var elapsed = timestamp - APP_STATE.animationStartTime;
+      var idealIndex = Math.min(count, Math.floor(elapsed * APP_STATE.pixelsPerMs));
+      var maxByInflight = APP_STATE.animSettled + CONFIG.MAX_INFLIGHT;
+      var targetIndex = Math.min(idealIndex, maxByInflight);
+
+      while (APP_STATE.animBatchIndex < targetIndex) {
+        // Each pixel gets its ideal start time for smooth sub-frame staggering
+        startTimes[APP_STATE.animBatchIndex] = APP_STATE.animationStartTime +
+          (APP_STATE.animBatchIndex / APP_STATE.pixelsPerMs);
+        APP_STATE.animBatchIndex++;
       }
 
-      // Render frame
-      var imageData = ctx.createImageData(width, height);
+      // Render frame — single ImageData spanning both rectangles and gap
+      var imageData = ctx.createImageData(canvasWidth, canvasHeight);
       var pixels = imageData.data;
       var settled = 0;
 
@@ -1550,19 +1568,19 @@
         var px, py;
 
         if (st === 0) {
-          // Not started — draw at source
+          // Not started — draw at source (left rectangle)
           px = sx;
           py = sy;
         } else {
-          var elapsed = timestamp - st;
-          if (elapsed >= tweenDur) {
-            // Finished — draw at target
+          var pixelElapsed = timestamp - st;
+          if (pixelElapsed >= tweenDur) {
+            // Finished — draw at target (right rectangle)
             px = tx;
             py = ty;
             settled++;
           } else {
-            // Tweening — interpolate with arc
-            var t = easeInOutCubic(elapsed / tweenDur);
+            // Tweening — interpolate with arc through the gap
+            var t = easeInOutCubic(pixelElapsed / tweenDur);
             var arcScale = 4 * t * (1 - t);
             var arcX = Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arcScale;
             var arcY = Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arcScale;
@@ -1571,15 +1589,15 @@
           }
         }
 
-        // Clamp to canvas bounds
+        // Clamp to full canvas bounds (source + gap + target)
         var ix = Math.round(px);
         var iy = Math.round(py);
         if (ix < 0) ix = 0;
-        if (ix >= width) ix = width - 1;
+        if (ix >= canvasWidth) ix = canvasWidth - 1;
         if (iy < 0) iy = 0;
-        if (iy >= height) iy = height - 1;
+        if (iy >= canvasHeight) iy = canvasHeight - 1;
 
-        var off = (iy * width + ix) * 4;
+        var off = (iy * canvasWidth + ix) * 4;
         pixels[off] = colors[i * 4];
         pixels[off + 1] = colors[i * 4 + 1];
         pixels[off + 2] = colors[i * 4 + 2];
@@ -1616,16 +1634,26 @@
         APP_STATE.animationFrameId = null;
       }
 
-      // Copy final state to result canvas
+      // Extract target image (right rectangle) from the wide animation canvas
       var animCanvas = document.getElementById('animation-canvas');
       var resultCanvas = document.getElementById('result-canvas');
       if (animCanvas && resultCanvas) {
-        resultCanvas.width = animCanvas.width;
-        resultCanvas.height = animCanvas.height;
-        resultCanvas.style.width = animCanvas.style.width;
-        resultCanvas.style.height = animCanvas.style.height;
+        var size = APP_STATE.animImageSize || APP_STATE.selectedResolution;
+        var gapPx = APP_STATE.animGapPx || Math.round(size * CONFIG.CANVAS_GAP_RATIO);
+        resultCanvas.width = size;
+        resultCanvas.height = size;
+        // Scale result display to comfortable square size
+        var displaySize = Math.min(
+          Math.floor(window.innerWidth * 0.85),
+          Math.floor(window.innerHeight * 0.65)
+        );
+        resultCanvas.style.width = displaySize + 'px';
+        resultCanvas.style.height = displaySize + 'px';
         var ctx = resultCanvas.getContext('2d');
-        if (ctx) ctx.drawImage(animCanvas, 0, 0);
+        if (ctx) {
+          // Draw only the right-side target rectangle
+          ctx.drawImage(animCanvas, size + gapPx, 0, size, size, 0, 0, size, size);
+        }
       }
 
       // Compute stats
@@ -1670,10 +1698,12 @@
       APP_STATE.targetXY = null;
       APP_STATE.colors = null;
       APP_STATE.startTimes = null;
+      APP_STATE.animImageSize = null;
+      APP_STATE.animGapPx = null;
+      APP_STATE.pixelsPerMs = 0;
       APP_STATE.animationStartTime = null;
       APP_STATE.animBatchIndex = 0;
       APP_STATE.animSettled = 0;
-      APP_STATE.animLastBatchTime = 0;
 
       // Reset UI
       var preview = document.getElementById('source-preview');
@@ -1933,7 +1963,7 @@
       const expectedKeys = [
         'COLOR_BG_PRIMARY', 'COLOR_TEXT_ACCENT', 'RESOLUTION_LOW',
         'RESOLUTION_MID', 'RESOLUTION_HIGH', 'DEFAULT_RESOLUTION',
-        'BATCH_PERCENT', 'TWEEN_DURATION_MS', 'ARC_MAGNITUDE',
+        'TWEEN_DURATION_MS', 'ARC_MAGNITUDE', 'TARGET_DURATION_S',
         'LUMINANCE_BAND_WIDTH', 'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS'
       ];
       const missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
@@ -1964,10 +1994,11 @@
         'COLOR_TEXT_ACCENT', 'COLOR_GLITCH_R', 'COLOR_GLITCH_C', 'COLOR_DANGER',
         'RESOLUTION_LOW', 'RESOLUTION_MID', 'RESOLUTION_HIGH', 'DEFAULT_RESOLUTION',
         'NOISE_SCALE', 'NOISE_FPS',
-        'BATCH_PERCENT', 'BATCH_INTERVAL_MS', 'TWEEN_DURATION_MS',
+        'TWEEN_DURATION_MS', 'TARGET_DURATION_S',
         'ARC_MAGNITUDE', 'COMPLETION_DELAY_MS',
         'LUMINANCE_BAND_WIDTH',
-        'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS', 'PROCEDURAL_TARGET_COUNT'
+        'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS', 'PROCEDURAL_TARGET_COUNT',
+        'CANVAS_GAP_RATIO', 'MAX_INFLIGHT'
       ];
       var missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
       var wrongType = expectedKeys.filter(function(k) {
@@ -2134,7 +2165,7 @@
       for (var i = 0; i < 16; i++) {
         mapping.push({ sourceIndex: i, targetIndex: 15 - i, r: 0, g: 0, b: 0, a: 255, luminance: 0 });
       }
-      var arrays = buildAnimationArrays(mapping, 4);
+      var arrays = buildAnimationArrays(mapping, 4, 0);
       var pass = arrays.sourceXY.length === 32 &&
                  arrays.targetXY.length === 32 &&
                  arrays.colors.length === 64 &&
@@ -2343,6 +2374,81 @@
       };
     }
     VALIDATIONS.push(validate_phase2_proceduralTargets);
+
+    // ─── Phase 6 Validations ───
+
+    /**
+     * @description Validates that CANVAS_GAP_RATIO and MAX_INFLIGHT exist in CONFIG with correct types.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase6_configKeys() {
+      var hasGap = typeof CONFIG.CANVAS_GAP_RATIO === 'number' && CONFIG.CANVAS_GAP_RATIO > 0 && CONFIG.CANVAS_GAP_RATIO < 1;
+      var hasMax = typeof CONFIG.MAX_INFLIGHT === 'number' && CONFIG.MAX_INFLIGHT > 0 && Number.isInteger(CONFIG.MAX_INFLIGHT);
+      var pass = hasGap && hasMax;
+      return {
+        pass: pass,
+        name: 'phase6_configKeys',
+        detail: pass
+          ? 'CANVAS_GAP_RATIO=' + CONFIG.CANVAS_GAP_RATIO + ' MAX_INFLIGHT=' + CONFIG.MAX_INFLIGHT
+          : 'hasGap=' + hasGap + ' hasMax=' + hasMax
+      };
+    }
+    VALIDATIONS.push(validate_phase6_configKeys);
+
+    /**
+     * @description Validates that buildAnimationArrays offsets targetXY by size+gap.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase6_targetXYOffset() {
+      var size = 4;
+      var gapPx = 2;
+      var mapping = [];
+      for (var i = 0; i < 16; i++) {
+        mapping.push({ sourceIndex: i, targetIndex: 15 - i, r: 0, g: 0, b: 0, a: 255, luminance: 0 });
+      }
+      var arrays = buildAnimationArrays(mapping, size, gapPx);
+      // mapping[0].targetIndex = 15 → tx = 15 % 4 = 3, offset to 3 + 4 + 2 = 9
+      // mapping[15].targetIndex = 0 → tx = 0 % 4 = 0, offset to 0 + 4 + 2 = 6
+      var txForTarget15 = arrays.targetXY[0 * 2];
+      var txForTarget0 = arrays.targetXY[15 * 2];
+      var pass = txForTarget15 === (3 + size + gapPx) && txForTarget0 === (0 + size + gapPx);
+      return {
+        pass: pass,
+        name: 'phase6_targetXYOffset',
+        detail: pass
+          ? 'targetXY x-coords correctly offset by size+gap'
+          : 'Expected tx[0]=' + (3 + size + gapPx) + ' got ' + txForTarget15 +
+            ', tx[15]=' + (0 + size + gapPx) + ' got ' + txForTarget0
+      };
+    }
+    VALIDATIONS.push(validate_phase6_targetXYOffset);
+
+    /**
+     * @description Validates sourceXY coordinates remain in left rectangle (no offset).
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase6_sourceXYNoOffset() {
+      var size = 4;
+      var gapPx = 2;
+      var mapping = [];
+      for (var i = 0; i < 16; i++) {
+        mapping.push({ sourceIndex: i, targetIndex: 15 - i, r: 0, g: 0, b: 0, a: 255, luminance: 0 });
+      }
+      var arrays = buildAnimationArrays(mapping, size, gapPx);
+      // mapping[0].sourceIndex = 0 → sx = 0 % 4 = 0
+      // mapping[15].sourceIndex = 15 → sx = 15 % 4 = 3
+      var sx0 = arrays.sourceXY[0];
+      var sx15 = arrays.sourceXY[15 * 2];
+      var pass = sx0 === 0 && sx15 === 3;
+      return {
+        pass: pass,
+        name: 'phase6_sourceXYNoOffset',
+        detail: pass
+          ? 'sourceXY x-coords stay in left rectangle (no offset)'
+          : 'Expected sx[0]=0 got ' + sx0 + ', sx[15]=3 got ' + sx15
+      };
+    }
+    VALIDATIONS.push(validate_phase6_sourceXYNoOffset);
 
     // ─── Validation Runner ───
 
