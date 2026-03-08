@@ -698,7 +698,7 @@
     <p id="result-stats" class="result-stats"></p>
     <div class="result-buttons">
       <button id="btn-download" class="btn btn--primary">Download Result</button>
-      <button id="btn-retry" class="btn">Try Another Pattern</button>
+      <button id="btn-retry" class="btn">Try Again</button>
       <button id="btn-start-over" class="btn btn--secondary">Start Over</button>
     </div>
   </div>
@@ -780,6 +780,7 @@
       MAX_INFLIGHT: 20000,
 
       // Default image matching
+      HISTOGRAM_MIN_SCORE: 0.3,
       HISTOGRAM_BINS: 32,
       DEFAULT_IMAGE_PATHS: [
         'defaultImages/img1.jpg',
@@ -826,7 +827,11 @@
       // Dual-canvas layout (allocated in Phase 6)
       animImageSize: null,
       animGapPx: null,
-      pixelsPerMs: 0
+      pixelsPerMs: 0,
+
+      // Ranked default image targets (Phase 9)
+      rankedTargets: null,
+      rankedTargetIndex: 0
     };
 
     // ═══════════════════════════════════════════
@@ -1371,6 +1376,25 @@
     }
 
     /**
+     * @description Ranks candidate buffers by histogram similarity and filters out low-scoring ones.
+     * @param {Float64Array} sourceHist - Source luminance histogram
+     * @param {Array} buffers - Array of PixelBuffer objects
+     * @param {Array<Float64Array>} histograms - Corresponding histograms
+     * @returns {Array<{ buffer: object, score: number }>} Sorted best-first, filtered by HISTOGRAM_MIN_SCORE
+     */
+    function rankAndFilterDefaults(sourceHist, buffers, histograms) {
+      var scored = [];
+      for (var i = 0; i < buffers.length; i++) {
+        var score = histogramIntersection(sourceHist, histograms[i]);
+        if (score >= CONFIG.HISTOGRAM_MIN_SCORE) {
+          scored.push({ buffer: buffers[i], score: score });
+        }
+      }
+      scored.sort(function(a, b) { return b.score - a.score; });
+      return scored;
+    }
+
+    /**
      * @description Loads an image from a URL path and returns a Promise resolving to an HTMLImageElement.
      * @param {string} path - Relative or absolute image path
      * @returns {Promise<HTMLImageElement>}
@@ -1419,11 +1443,24 @@
 
       // If no images loaded, fall back to procedural
       if (loaded.length === 0) {
+        APP_STATE.rankedTargets = null;
+        APP_STATE.rankedTargetIndex = 0;
         return generateRandomTarget(resolution);
       }
 
-      var bestIdx = findBestMatchIndex(sourceHist, histograms);
-      return loaded[bestIdx];
+      // Rank, filter, and store for cycling
+      var ranked = rankAndFilterDefaults(sourceHist, loaded, histograms);
+
+      // If all filtered out, fall back to procedural
+      if (ranked.length === 0) {
+        APP_STATE.rankedTargets = null;
+        APP_STATE.rankedTargetIndex = 0;
+        return generateRandomTarget(resolution);
+      }
+
+      APP_STATE.rankedTargets = ranked;
+      APP_STATE.rankedTargetIndex = 0;
+      return ranked[0].buffer;
     }
 
     // ═══════════════════════════════════════════
@@ -1918,6 +1955,8 @@
       APP_STATE.animationStartTime = null;
       APP_STATE.animBatchIndex = 0;
       APP_STATE.animSettled = 0;
+      APP_STATE.rankedTargets = null;
+      APP_STATE.rankedTargetIndex = 0;
 
       // Reset UI
       var preview = document.getElementById('source-preview');
@@ -1958,20 +1997,23 @@
     }
 
     /**
-     * @description Cycles to the next animation pattern and re-runs the reveal.
+     * @description Re-runs the reveal. In fate mode, cycles to the next ranked default image.
+     *              In custom mode, re-runs with the same custom target.
      */
-    function tryAnotherPattern() {
-      var patterns = ['spatial_sweep', 'random_scatter', 'luminance_ordered', 'spiral'];
-      var idx = patterns.indexOf(APP_STATE.selectedPattern);
-      APP_STATE.selectedPattern = patterns[(idx + 1) % patterns.length];
-
+    function tryAgain() {
       // Cancel current animation if running
       if (APP_STATE.animationFrameId) {
         cancelAnimationFrame(APP_STATE.animationFrameId);
         APP_STATE.animationFrameId = null;
       }
 
-      // Re-run with same buffers but new pattern
+      // In fate mode with ranked targets, cycle to next
+      if (APP_STATE.targetMode === 'fate' && APP_STATE.rankedTargets && APP_STATE.rankedTargets.length > 0) {
+        APP_STATE.rankedTargetIndex = (APP_STATE.rankedTargetIndex + 1) % APP_STATE.rankedTargets.length;
+        APP_STATE.targetBuffer = APP_STATE.rankedTargets[APP_STATE.rankedTargetIndex].buffer;
+      }
+
+      // Re-run animation with current (or new) target
       startReveal();
     }
 
@@ -2107,7 +2149,7 @@
       btnDownload?.addEventListener('click', downloadResult);
 
       var btnRetry = document.getElementById('btn-retry');
-      btnRetry?.addEventListener('click', tryAnotherPattern);
+      btnRetry?.addEventListener('click', tryAgain);
 
       var btnStartOver = document.getElementById('btn-start-over');
       btnStartOver?.addEventListener('click', function() {
@@ -2231,7 +2273,7 @@
         'LUMINANCE_BAND_WIDTH',
         'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS', 'PROCEDURAL_TARGET_COUNT',
         'CANVAS_GAP_RATIO', 'MAX_INFLIGHT',
-        'HISTOGRAM_BINS', 'DEFAULT_IMAGE_PATHS'
+        'HISTOGRAM_MIN_SCORE', 'HISTOGRAM_BINS', 'DEFAULT_IMAGE_PATHS'
       ];
       var missing = expectedKeys.filter(function(k) { return !(k in CONFIG); });
       var wrongType = expectedKeys.filter(function(k) {
@@ -2878,6 +2920,98 @@
       };
     }
     VALIDATIONS.push(validate_phase8_optionsRowExists);
+
+    // ─── Phase 9 Validations ───
+
+    /**
+     * @description Validates HISTOGRAM_MIN_SCORE exists in CONFIG with correct type and range.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase9_configMinScore() {
+      var has = typeof CONFIG.HISTOGRAM_MIN_SCORE === 'number' &&
+                CONFIG.HISTOGRAM_MIN_SCORE > 0 && CONFIG.HISTOGRAM_MIN_SCORE < 1;
+      return {
+        pass: has,
+        name: 'phase9_configMinScore',
+        detail: has
+          ? 'HISTOGRAM_MIN_SCORE=' + CONFIG.HISTOGRAM_MIN_SCORE
+          : 'Missing or invalid HISTOGRAM_MIN_SCORE'
+      };
+    }
+    VALIDATIONS.push(validate_phase9_configMinScore);
+
+    /**
+     * @description Validates APP_STATE has rankedTargets and rankedTargetIndex fields.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase9_appStateFields() {
+      var hasRanked = 'rankedTargets' in APP_STATE;
+      var hasIndex = 'rankedTargetIndex' in APP_STATE;
+      var pass = hasRanked && hasIndex;
+      return {
+        pass: pass,
+        name: 'phase9_appStateFields',
+        detail: pass
+          ? 'APP_STATE has rankedTargets and rankedTargetIndex'
+          : 'hasRanked=' + hasRanked + ' hasIndex=' + hasIndex
+      };
+    }
+    VALIDATIONS.push(validate_phase9_appStateFields);
+
+    /**
+     * @description Validates btn-retry exists with label "Try Again" and btn-retry id.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase9_tryAgainButton() {
+      var btn = document.getElementById('btn-retry');
+      var exists = !!btn;
+      var labelOk = exists && btn.textContent.trim() === 'Try Again';
+      var pass = exists && labelOk;
+      return {
+        pass: pass,
+        name: 'phase9_tryAgainButton',
+        detail: pass
+          ? 'btn-retry exists with label "Try Again"'
+          : 'exists=' + exists + ' labelOk=' + labelOk
+      };
+    }
+    VALIDATIONS.push(validate_phase9_tryAgainButton);
+
+    /**
+     * @description Validates rankAndFilterDefaults returns sorted, filtered results.
+     * @returns {{ pass: boolean, name: string, detail: string }}
+     */
+    function validate_phase9_rankAndFilter() {
+      var bins = CONFIG.HISTOGRAM_BINS;
+      // Source: uniform
+      var sourceHist = new Float64Array(bins);
+      for (var i = 0; i < bins; i++) sourceHist[i] = 1.0 / bins;
+
+      // 3 candidates with known scores
+      var cand0 = new Float64Array(bins); cand0[0] = 1.0; // very different
+      var cand1 = new Float64Array(bins);
+      for (var j = 0; j < bins; j++) cand1[j] = 1.0 / bins; // identical
+      var cand2 = new Float64Array(bins);
+      cand2[0] = 0.5;
+      for (var k = 1; k < bins; k++) cand2[k] = 0.5 / (bins - 1); // partial match
+
+      var buffers = [{ dummy: 0 }, { dummy: 1 }, { dummy: 2 }];
+      var histograms = [cand0, cand1, cand2];
+
+      var ranked = rankAndFilterDefaults(sourceHist, buffers, histograms);
+      // Should be sorted best first, and cand0 might be filtered out depending on threshold
+      var bestFirst = ranked.length > 0 && ranked[0].buffer.dummy === 1;
+      var pass = bestFirst && ranked.length >= 2;
+      return {
+        pass: pass,
+        name: 'phase9_rankAndFilter',
+        detail: pass
+          ? 'Ranked ' + ranked.length + ' candidates, best match first (idx=1)'
+          : 'ranked.length=' + ranked.length +
+            (ranked.length > 0 ? ' first.dummy=' + ranked[0].buffer.dummy : '')
+      };
+    }
+    VALIDATIONS.push(validate_phase9_rankAndFilter);
 
     // ─── Validation Runner ───
 

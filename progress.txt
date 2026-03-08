@@ -1,21 +1,19 @@
 <progress>
-  <phase>Phase 8: Compact Setup Screen with Custom Dropdowns</phase>
+  <phase>Phase 9: Try Again Button with Ranked Default Image Cycling</phase>
   <status>IN PROGRESS</status>
   <last_completed_step>EXPLORE</last_completed_step>
   <next_step>THINK HARD</next_step>
   <files_read_this_session>index.html, progress.txt</files_read_this_session>
   <plan_summary>
-    Redesign the setup screen to be more compact. Replace Quality and Animation Pattern
-    button groups with custom-styled CRT-aesthetic dropdowns. Replace Hidden Image toggle
-    buttons with a dropdown ("I'm feeling lucky" / "Luck is not my way"). All three controls
-    sit in a single horizontal row below the photo preview. When "Luck is not my way" is
-    selected, a file upload area with optional preview toggle appears below the row. Quality
-    default stays 512x512, pattern default changes to luminance-ordered. On mobile the three
-    dropdowns stack vertically. Touches: CSS (new .custom-select styles, update .setup-section,
-    update responsive), HTML (replace setup sections with row of dropdowns), JS (replace
-    initOptionGroup listeners with change handlers on select elements, update default pattern
-    in APP_STATE). Existing initOptionGroup function and .option-btn styles can remain for
-    any other uses but the setup section HTML/CSS is rewritten.
+    Replace "Try Another Pattern" button with "Try Again" button on the result screen.
+    In fate mode: cycles through default images ranked by histogram similarity, excluding
+    those below a threshold (CONFIG.HISTOGRAM_MIN_SCORE). Wraps around when exhausted.
+    Runs full animation each time. In custom mode: re-runs animation with same custom target.
+    Requires storing the ranked image list in APP_STATE during the initial Reveal so the
+    result screen can cycle through them. Changes: CONFIG (add HISTOGRAM_MIN_SCORE),
+    APP_STATE (add rankedTargets array and rankedTargetIndex), modify loadBestMatchingDefaultImage
+    to store full ranked list, replace tryAnotherPattern with tryAgain, update HTML button,
+    update event listener wiring. Remove tryAnotherPattern function entirely.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
