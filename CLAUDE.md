@@ -10,7 +10,62 @@ Licensed under GPL-3.0.
 
 ## Architecture
 
-The entire application lives in a single `index.html` file (~2400 lines) containing inline CSS, HTML, and JavaScript. There is no build system, no bundler, no package manager, and no external JS dependencies. The only external resource is the Google Fonts "Share Tech Mono" font.
+The application is split into ES modules with no build system, no bundler, no package manager, and no external JS dependencies. The only external resource is the Google Fonts "Share Tech Mono" font.
+
+**Important:** ES modules require a local server (`npx serve . -p 3000`). `file://` protocol will not work.
+
+### File Structure
+
+```
+index.html              (132 lines — HTML only, screen markup)
+css/styles.css          (600 lines — all CSS)
+js/
+  main.js               (entry point — imports + init)
+  config.js             (CONFIG object + TESTING flag)
+  state.js              (APP_STATE mutable singleton)
+  utils.js              (pure functions: luminance, hue, easing, shuffle, comparator)
+  events.js             (initEvents — wires all buttons, drag-and-drop, file inputs)
+  state-management.js   (resetState, downloadResult, tryAgain)
+  ui/
+    screens.js          (showScreen)
+    toast.js            (showToast)
+    noise.js            (initNoiseCanvas — VHS noise overlay)
+    options.js          (initOptionGroup — button group delegation)
+  image/
+    pipeline.js         (cover crop, pixel buffer, loadImageFromFile, upload handlers)
+    procedural.js       (5 procedural target generators + PROCEDURAL_GENERATORS array)
+    matching.js         (histogram matching, rankAndFilter, loadBestMatchingDefaultImage)
+  algorithm/
+    pixel-alchemy.js    (buildPixelDescriptors, buildMapping — core remapping)
+    patterns.js         (sortMappingByPattern — spatial sweep, random, luminance, spiral)
+  animation/
+    engine.js           (buildAnimationArrays, startReveal, animationLoop, finishAnimation)
+  validation/
+    validations.js      (all validation functions — dynamically imported with ?test=true)
+```
+
+### Dependency Graph (import direction →)
+
+```
+main.js → config, ui/screens, ui/noise, events, validation/validations (dynamic)
+config.js → (leaf)
+state.js → config
+utils.js → config
+ui/screens → state
+ui/toast → config
+ui/noise → config, state, ui/toast
+ui/options → (leaf)
+image/pipeline → config, state, ui/toast, ui/screens
+image/procedural → image/pipeline
+image/matching → config, state, image/pipeline, image/procedural
+algorithm/pixel-alchemy → utils
+algorithm/patterns → utils
+animation/engine → config, state, utils, ui/screens, ui/toast, algorithm/*
+state-management → config, state, ui/screens, ui/toast, animation/engine
+events → state, ui/*, image/*, animation/engine, state-management
+```
+
+No circular dependencies.
 
 ### Screens (UI Flow)
 
@@ -21,38 +76,18 @@ The app uses a 4-screen state machine controlled by `showScreen(screenId)` via `
 3. **Animation** — Canvas-based pixel migration with progress bar
 4. **Result** — Final image display, download, replay, start over
 
-### JavaScript Sections (in order within `<script>`)
-
-| Section | Lines ~ | Purpose |
-|---|---|---|
-| CONFIG | 670 | Central constants: colors, resolutions, animation timing, algorithm params |
-| APP_STATE | 713 | Mutable singleton: current screen, pixel buffers, mapping, typed arrays |
-| Screen Management | 742 | `showScreen()` |
-| Toast Notifications | 761 | `showToast()` |
-| Noise Canvas | 780 | Full-screen animated noise overlay via `<canvas>` |
-| Option Group Helpers | 842 | Delegated click handlers for resolution/pattern/target buttons |
-| Image Pipeline | 858 | Upload, cover-crop, `createPixelBuffer()`, `loadImageFromFile()` |
-| Procedural Target Generators | 1022 | 5 built-in target patterns (circles, gradient, plasma, checkerboard, noise) |
-| Pixel Alchemy | 1208 | Luminance calc, hue calc, sort comparator, `buildMapping()` — the core remapping algorithm |
-| Animation Patterns | 1322 | Sort orders: spatial sweep, random scatter, luminance-ordered, spiral |
-| Animation Engine | 1386 | `startAnimation()`, typed array setup, easing, batch scheduling, canvas rendering |
-| State Management | 1646 | `resetState()`, `retryWithNewPattern()`, URL cleanup |
-| Event Listeners | 1735 | `initEvents()` — wires all buttons, drag-and-drop, file inputs |
-| Initialisation | 1858 | `init()` on DOMContentLoaded |
-| Validation Suite | 1878 | 14 test functions covering all phases, triggered by `?test=true` |
-
 ### Core Algorithm (Pixel Alchemy)
 
-`buildMapping()` creates a bijective pixel-index mapping between source and target images:
+`buildMapping()` in `js/algorithm/pixel-alchemy.js` creates a bijective pixel-index mapping between source and target images:
 - Pixels are sorted by luminance (primary) and hue (secondary) using band-based bucketing (`LUMINANCE_BAND_WIDTH`)
 - Source and target get independently sorted copies
 - The mapping assigns each source pixel position to a target position with matching luminance/hue rank
 
 ### Key Data Structures
 
-- **PixelBuffer**: `{ r: Uint8Array, g: Uint8Array, b: Uint8Array, count: number }` — channel-separated pixel data
-- **Mapping**: `Uint32Array` — index `i` holds the target position for source pixel `i`
-- **Animation typed arrays**: `sourceXY`, `targetXY` (Float32Array), `colors` (Uint8Array), `startTimes` (Float32Array)
+- **PixelBuffer**: `{ width, height, data: Uint8ClampedArray, count: number }` — RGBA pixel data
+- **Mapping**: `Array<{ sourceIndex, targetIndex, r, g, b, a, luminance }>` — pixel-level mapping
+- **Animation typed arrays**: `sourceXY`, `targetXY` (Float32Array), `colors` (Uint8ClampedArray), `startTimes` (Float64Array)
 
 <!--
   Behavioral control blocks (XML tags per Anthropic prompt engineering best practices).
@@ -62,48 +97,45 @@ The app uses a 4-screen state machine controlled by `showScreen(screenId)` via `
 
 <default_to_action>
 Implement changes directly rather than suggesting them.
-This project is a single index.html file — there is no ambiguity about where edits go.
 When asked to add a feature or fix a bug, produce the working code.
+Identify the correct module file(s) from the file structure above.
 </default_to_action>
 
 <avoid_overengineering>
 Only make changes that are directly requested. Do not add features, refactor surrounding
-code, or make improvements beyond what was asked. Claude 4.x has a documented tendency
-to over-engineer (creating extra files, adding unnecessary abstractions, building in
-flexibility that was not requested). Resist this — the project is intentionally a single
-self-contained file. A bug fix changes only the buggy code. A new feature adds only
-what was described.
+code, or make improvements beyond what was asked. A bug fix changes only the buggy code.
+A new feature adds only what was described.
 </avoid_overengineering>
 
 <investigate_before_answering>
-Read the relevant section of index.html before answering questions about it or modifying it.
-Line numbers shift between sessions, so never trust remembered positions.
+Read the relevant module file(s) before answering questions about them or modifying them.
+Use the file structure above to identify which file(s) contain the code in question.
 </investigate_before_answering>
 
 ## Core Rules
 
 These rules exist because past sessions revealed specific failure modes. Each explanation helps you generalize correctly to novel situations.
 
-1. **Read before you write.** The single `index.html` file shifts between sessions, so reading prevents edits based on stale line numbers or mental models. Always re-read the relevant section before modifying it.
-2. **Write validations before implementation.** New features need corresponding validation functions in the Validation Suite (line ~1878). Write the validation first to define the contract, then implement the feature. This prevents scope creep and ensures the feature is testable by design.
-3. **Fix the implementation, not the validations.** Validation functions represent the specification. If a validation fails, the code is wrong — editing validations to pass hides regressions and breaks the contract with the user.
-4. **Plan exact edits before writing code.** Think through which sections of `index.html` will change, which CONFIG keys are needed, which APP_STATE fields are affected, and what edge cases exist — before typing. Thinking through the complete change prevents partial implementations and reduces follow-up corrections.
-5. **Run the full validation suite after each change.** Open `index.html?test=true` and confirm all 14 validations pass. Regressions in unrelated sections are the most common bug source because CONFIG and APP_STATE are shared mutable state.
+1. **Read before you write.** Always re-read the relevant module file before modifying it.
+2. **Write validations before implementation.** New features need corresponding validation functions in `js/validation/validations.js`. Write the validation first to define the contract, then implement the feature.
+3. **Fix the implementation, not the validations.** Validation functions represent the specification. If a validation fails, the code is wrong — editing validations to pass hides regressions.
+4. **Plan exact edits before writing code.** Think through which module files will change, which CONFIG keys are needed, which APP_STATE fields are affected, and what edge cases exist — before typing.
+5. **Run the full validation suite after each change.** Open `index.html?test=true` (via local server) and confirm all validations pass.
 6. **Implement exactly what was asked.** Extra refactoring and speculative features introduce untested code paths. If you notice something else broken, tell the user rather than fixing it unsolicited.
-7. **One logical change per commit.** Atomic commits make bisecting and reverting possible. Since there is only one source file, describe the change clearly in the commit message.
-8. **Put every magic number in CONFIG.** Scattered literals make tuning impossible and create silent inconsistencies when the same value appears in multiple places. All numeric and color constants belong in the CONFIG object (~line 670).
-9. **Check existing patterns in neighboring code** before writing new code, so additions stay consistent with the file's conventions (e.g., JSDoc style, error handling patterns, option group delegation, `// ═══` section banners).
+7. **One logical change per commit.** Atomic commits make bisecting and reverting possible.
+8. **Put every magic number in CONFIG.** All numeric and color constants belong in `js/config.js`.
+9. **Check existing patterns in neighboring code** before writing new code, so additions stay consistent with the module's conventions (e.g., JSDoc style, error handling patterns, `// ═══` section banners).
 10. **Ask the user when a task is ambiguous** rather than guessing. A wrong guess wastes more time than a clarifying question.
 
 ## Workflow
 
 Follow the Explore → Plan → Validate → Code → Commit loop for every code change:
 
-1. **EXPLORE** — Read all relevant sections of `index.html`. Use search to find the exact lines. Do not write any code yet.
+1. **EXPLORE** — Read the relevant module file(s). Use search to find the exact location. Do not write any code yet.
 2. **THINK HARD** — Form a complete plan. Consider edge cases, performance implications (animation runs at 60fps with potentially 768² pixels), and how the change connects to CONFIG, APP_STATE, and the validation suite. Before writing any code, output your plan by writing to `progress.txt` using the exact structure defined below. Then paste the completed entry as a fenced code block in your response so the user can verify it before you proceed. Step 3 does not begin until the user has seen this output.
-3. **WRITE VALIDATIONS FIRST** — Write failing validation functions for the behavior you're about to implement. Add them to the `VALIDATIONS` array. Commit them.
+3. **WRITE VALIDATIONS FIRST** — Write failing validation functions in `js/validation/validations.js`. Commit them.
 4. **IMPLEMENT** — Write the code that makes the validations pass. Do not modify the validations. Iterate until all validations pass.
-5. **VERIFY END-TO-END** — Open the browser, load `index.html`, upload an image, run the full flow (upload → setup → animate → result), and confirm the feature works as a human would experience it. Run `?test=true` to confirm all validations pass. Do not mark a feature complete based on validations alone.
+5. **VERIFY END-TO-END** — Open the browser (via local server), load `index.html`, upload an image, run the full flow (upload → setup → animate → result), and confirm the feature works as a human would experience it. Run `?test=true` to confirm all validations pass.
 6. **COMMIT** — Commit with message: `git commit -m "[phase-N] what was done"`. Commit after completing each logical change so progress is always recoverable.
 
 For non-code tasks (documentation, analysis, planning), skip steps 3–4 and move from THINK HARD directly to COMMIT or to delivering the result.
@@ -118,9 +150,9 @@ Write every `progress.txt` entry using this exact XML structure. Do not add fiel
   <status>IN PROGRESS | BLOCKED | COMPLETE</status>
   <last_completed_step>Exact step label from the Workflow — e.g. "EXPLORE"</last_completed_step>
   <next_step>Exact step label from the Workflow — e.g. "THINK HARD"</next_step>
-  <files_read_this_session>Comma-separated list of every file read — e.g. "index.html, progress.txt"</files_read_this_session>
+  <files_read_this_session>Comma-separated list of every file read — e.g. "js/config.js, js/state.js"</files_read_this_session>
   <plan_summary>
-    2–5 sentences. State what will change, which sections of index.html will be touched, and why this approach was chosen over alternatives.
+    2–5 sentences. State what will change, which module files will be touched, and why this approach was chosen over alternatives.
   </plan_summary>
   <blockers>none — or a concrete description of what is blocking progress</blockers>
 </progress>
@@ -151,22 +183,26 @@ If the context window compacts mid-session, treat it as a new session start. Rep
 ## Coding Standards
 
 ### Structure
-- Single `index.html` — all CSS, HTML, and JS are inline. Keep it that way unless the user explicitly requests splitting.
-- `'use strict'` at the top of the `<script>` block
-- Sections are delimited by `// ═══` comment banners — maintain this convention for all new sections
+- ES modules: each file has `'use strict'` at the top and uses `import`/`export`
+- `index.html` is HTML only — no inline JS or CSS
+- `css/styles.css` contains all CSS
+- Sections within files are delimited by `// ═══` comment banners
+- **Max file length: 200 lines** — split beyond that (except `validation/validations.js` which is test-only)
+- **Max function length: 30 lines** — extract named helpers beyond that
+- **Max nesting depth: 3 levels** — flatten with early returns
 
 ### Code Quality
-- **JSDoc** on every function — `@description`, `@param`, `@returns`
-- Naming: `camelCase` for functions/variables, `SCREAMING_SNAKE_CASE` for CONFIG constants
-- All constants in the CONFIG object — no magic numbers in function bodies
-- All mutable state in the APP_STATE object — no module-level variables outside these two objects
-- Use pure functions where possible (e.g., `computeCoverCrop`, `luminance`, `hue`) because they are easier to validate and reason about
+- **JSDoc** on every class and public method — `@param`, `@returns`, `@fires`, `@listens`
+- Naming: `camelCase` functions/variables · `PascalCase` classes · `SCREAMING_SNAKE_CASE` constants
+- All constants in the CONFIG object (`js/config.js`) — no magic numbers in function bodies
+- All mutable state in the APP_STATE object (`js/state.js`) — no module-level mutable variables outside these two objects
+- Pure functions in `js/utils.js` — zero side effects
+- Use pure functions where possible because they are easier to validate and reason about
 
 ### Performance
 - Animation targets 60fps with up to 768² (589,824) pixels
-- Use typed arrays (`Float32Array`, `Uint8Array`, `Uint32Array`) for pixel data and animation state, because standard arrays cause GC pauses at this scale
-- Batch pixel rendering — process pixels in `BATCH_PERCENT` groups per `BATCH_INTERVAL_MS`
-- Pre-allocate all typed arrays in `startAnimation()` — avoid allocations inside the render loop because they trigger garbage collection and drop frames
+- Use typed arrays (`Float32Array`, `Uint8ClampedArray`, `Uint32Array`) for pixel data and animation state, because standard arrays cause GC pauses at this scale
+- Pre-allocate all typed arrays in `startReveal()` — avoid allocations inside the render loop because they trigger garbage collection and drop frames
 - Use `requestAnimationFrame` for the animation loop
 
 ### CSS
@@ -178,14 +214,11 @@ If the context window compacts mid-session, treat it as a new session start. Rep
 ## Commands
 
 ```bash
-# Run locally (simplest — just open the file)
-# Open index.html directly in a browser
-
-# Run with a local server (avoids file:// CORS if adding fetch-based features)
+# Run locally (REQUIRED — ES modules need a server)
 npx serve . -p 3000
 
 # Run validation suite
-# Open index.html?test=true in browser — results log to console
+# Open http://localhost:3000/?test=true in browser — results log to console
 
 # Git commit convention
 git commit -m "[phase-N] description of what was done"
@@ -194,8 +227,8 @@ git commit -m "[phase-N] description of what was done"
 ## Recovery Procedures
 
 When progress stalls:
-- Re-read the relevant section of `index.html` rather than relying on memory or earlier line numbers
+- Re-read the relevant module file rather than relying on memory
 - If a validation reveals an unexpected issue, fix the implementation (see Core Rule 3)
-- If unsure about a function name or CONFIG key, grep for it in `index.html`
+- If unsure about a function name or CONFIG key, grep for it across `js/`
 - If a task seems ambiguous, ask the user for clarification
 - If the animation loop has performance issues, profile in browser DevTools and check for allocations in the render loop
