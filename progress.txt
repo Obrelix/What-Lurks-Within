@@ -1,22 +1,17 @@
 <progress>
   <phase>Phase 6: Dual-Canvas Animation with Particle Flight</phase>
-  <status>IN PROGRESS</status>
-  <last_completed_step>EXPLORE</last_completed_step>
-  <next_step>THINK HARD</next_step>
+  <status>COMPLETE</status>
+  <last_completed_step>VERIFY END-TO-END</last_completed_step>
+  <next_step>COMMIT</next_step>
   <files_read_this_session>index.html, progress.txt, CLAUDE.md</files_read_this_session>
   <plan_summary>
-    Redesign the animation screen to show two side-by-side rectangles (source left, target right)
+    Redesigned the animation screen to show two side-by-side rectangles (source left, target right)
     within a single wide canvas. Source image drains as pixels leave; target fills as they arrive.
-    In-flight pixels arc through a gap between the two rectangles, creating a particle-flight effect.
-    A single canvas with one putImageData call per frame keeps rendering performant — no fillRect
-    needed. An in-flight cap (MAX_INFLIGHT) gates batch release to keep the visual clean and
-    performance bounded. CSS max-width scaling handles mobile responsiveness.
-
-    Sections touched: CONFIG (add CANVAS_GAP_RATIO, MAX_INFLIGHT), buildAnimationArrays (offset
-    targetXY by size+gap), startReveal (canvas dimensions, CSS sizing), animationLoop (wide
-    ImageData, in-flight gating, canvasWidth for coordinate clamping), finishAnimation (extract
-    right-side target image for result canvas), CSS (#animation-canvas aspect ratio), Validation
-    Suite (new Phase 6 validations).
+    In-flight pixels arc through a gap between the two rectangles. Replaced batch release system
+    with continuous time-based release where each pixel gets a unique staggered start time,
+    eliminating the glitchy wave effect. Increased tween duration to 1500ms for slower visible
+    travel. Added TARGET_DURATION_S for consistent animation time across resolutions. Result
+    screen extracts only the target image from the right side of the animation canvas.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
