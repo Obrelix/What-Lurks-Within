@@ -9,7 +9,8 @@ import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
 } from '../image/matching.js';
-import { resolveVideoMimeType, createRecordingCanvas, drawWatermark, drawBufferFrame } from '../video/recorder.js';
+import { resolveVideoMimeType, drawWatermark, pixelBufferToCanvas } from '../video/recorder.js';
+import { renderBufferFrame } from '../animation/buffer-phases.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
 import { buildAnimationArrays } from '../animation/engine.js';
@@ -1043,41 +1044,6 @@ function validate_phase14b_watermarkConfig() {
 VALIDATIONS.push(validate_phase14b_watermarkConfig);
 
 /**
- * @description Validates APP_STATE has recordingCanvas field.
- * @returns {{ pass: boolean, name: string, detail: string }}
- */
-function validate_phase14b_recordingCanvasField() {
-  var pass = 'recordingCanvas' in APP_STATE;
-  return {
-    pass: pass,
-    name: 'phase14b_recordingCanvasField',
-    detail: pass
-      ? 'APP_STATE.recordingCanvas exists'
-      : 'recordingCanvas not found in APP_STATE'
-  };
-}
-VALIDATIONS.push(validate_phase14b_recordingCanvasField);
-
-/**
- * @description Validates createRecordingCanvas returns a canvas of correct size.
- * @returns {{ pass: boolean, name: string, detail: string }}
- */
-function validate_phase14b_createRecordingCanvas() {
-  var isFn = typeof createRecordingCanvas === 'function';
-  if (!isFn) return { pass: false, name: 'phase14b_createRecordingCanvas', detail: 'not a function' };
-  var c = createRecordingCanvas(64);
-  var pass = c instanceof HTMLCanvasElement && c.width === 64 && c.height === 64;
-  return {
-    pass: pass,
-    name: 'phase14b_createRecordingCanvas',
-    detail: pass
-      ? 'Created 64x64 off-screen canvas'
-      : 'width=' + (c ? c.width : 'null') + ' height=' + (c ? c.height : 'null')
-  };
-}
-VALIDATIONS.push(validate_phase14b_createRecordingCanvas);
-
-/**
  * @description Validates drawWatermark is a function that draws on a canvas context.
  * @returns {{ pass: boolean, name: string, detail: string }}
  */
@@ -1085,10 +1051,10 @@ function validate_phase14b_drawWatermark() {
   var isFn = typeof drawWatermark === 'function';
   if (!isFn) return { pass: false, name: 'phase14b_drawWatermark', detail: 'not a function' };
   var c = document.createElement('canvas');
-  c.width = 64; c.height = 64;
+  c.width = 128; c.height = 64;
   var ctx = c.getContext('2d');
-  drawWatermark(ctx, 64);
-  var data = ctx.getImageData(0, 0, 64, 64).data;
+  drawWatermark(ctx, 128, 64);
+  var data = ctx.getImageData(0, 0, 128, 64).data;
   var hasContent = false;
   for (var i = 3; i < data.length; i += 4) {
     if (data[i] > 0) { hasContent = true; break; }
@@ -1097,7 +1063,7 @@ function validate_phase14b_drawWatermark() {
     pass: hasContent,
     name: 'phase14b_drawWatermark',
     detail: hasContent
-      ? 'drawWatermark rendered visible pixels'
+      ? 'drawWatermark rendered visible pixels on wide canvas'
       : 'No visible pixels after drawWatermark'
   };
 }
@@ -1123,30 +1089,136 @@ function validate_phase14c_bufferConfig() {
 }
 VALIDATIONS.push(validate_phase14c_bufferConfig);
 
+
+// ─── Phase 14d Validations ───
+
 /**
- * @description Validates drawBufferFrame is exported and draws a PixelBuffer on a canvas.
+ * @description Validates CONFIG has VIDEO_BUFFER_SLIDE_MS with correct type.
  * @returns {{ pass: boolean, name: string, detail: string }}
  */
-function validate_phase14c_drawBufferFrame() {
-  var isFn = typeof drawBufferFrame === 'function';
-  if (!isFn) return { pass: false, name: 'phase14c_drawBufferFrame', detail: 'not a function' };
-  var c = document.createElement('canvas');
-  c.width = 4; c.height = 4;
+function validate_phase14d_slideConfig() {
+  var has = typeof CONFIG.VIDEO_BUFFER_SLIDE_MS === 'number' && CONFIG.VIDEO_BUFFER_SLIDE_MS > 0;
+  var pass = has;
+  return {
+    pass: pass,
+    name: 'phase14d_slideConfig',
+    detail: pass
+      ? 'VIDEO_BUFFER_SLIDE_MS=' + CONFIG.VIDEO_BUFFER_SLIDE_MS
+      : 'Missing or invalid VIDEO_BUFFER_SLIDE_MS'
+  };
+}
+VALIDATIONS.push(validate_phase14d_slideConfig);
+
+/**
+ * @description Validates APP_STATE has animPhase field.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14d_animPhaseField() {
+  var pass = 'animPhase' in APP_STATE;
+  return {
+    pass: pass,
+    name: 'phase14d_animPhaseField',
+    detail: pass
+      ? 'APP_STATE.animPhase exists'
+      : 'animPhase not found in APP_STATE'
+  };
+}
+VALIDATIONS.push(validate_phase14d_animPhaseField);
+
+/**
+ * @description Validates APP_STATE has animPhaseStart field.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14d_phaseStartField() {
+  var pass = 'animPhaseStart' in APP_STATE;
+  return {
+    pass: pass,
+    name: 'phase14d_phaseStartField',
+    detail: pass
+      ? 'APP_STATE.animPhaseStart exists'
+      : 'animPhaseStart not found in APP_STATE'
+  };
+}
+VALIDATIONS.push(validate_phase14d_phaseStartField);
+
+/**
+ * @description Validates APP_STATE has sourceImageCanvas and targetImageCanvas fields.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14d_imageCanvasFields() {
+  var hasSrc = 'sourceImageCanvas' in APP_STATE;
+  var hasTgt = 'targetImageCanvas' in APP_STATE;
+  var pass = hasSrc && hasTgt;
+  return {
+    pass: pass,
+    name: 'phase14d_imageCanvasFields',
+    detail: pass
+      ? 'APP_STATE has sourceImageCanvas and targetImageCanvas'
+      : 'hasSrc=' + hasSrc + ' hasTgt=' + hasTgt
+  };
+}
+VALIDATIONS.push(validate_phase14d_imageCanvasFields);
+
+/**
+ * @description Validates pixelBufferToCanvas converts a PixelBuffer to a canvas.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14d_pixelBufferToCanvas() {
+  var isFn = typeof pixelBufferToCanvas === 'function';
+  if (!isFn) return { pass: false, name: 'phase14d_pixelBufferToCanvas', detail: 'not a function' };
   var data = new Uint8ClampedArray(4 * 4 * 4);
   for (var i = 0; i < data.length; i += 4) { data[i] = 255; data[i + 3] = 255; }
   var buf = { width: 4, height: 4, data: data, count: 16 };
-  drawBufferFrame(c, buf);
-  var px = c.getContext('2d').getImageData(0, 0, 1, 1).data;
-  var pass = px[0] === 255 && px[3] === 255;
+  var c = pixelBufferToCanvas(buf);
+  var isCanvas = c instanceof HTMLCanvasElement;
+  var correctSize = isCanvas && c.width === 4 && c.height === 4;
+  var px = correctSize ? c.getContext('2d').getImageData(0, 0, 1, 1).data : null;
+  var correctPixel = px && px[0] === 255 && px[3] === 255;
+  var pass = isCanvas && correctSize && correctPixel;
   return {
     pass: pass,
-    name: 'phase14c_drawBufferFrame',
+    name: 'phase14d_pixelBufferToCanvas',
     detail: pass
-      ? 'drawBufferFrame rendered PixelBuffer correctly'
-      : 'Pixel[0,0] r=' + px[0] + ' a=' + px[3]
+      ? 'pixelBufferToCanvas rendered 4x4 PixelBuffer correctly'
+      : 'isCanvas=' + isCanvas + ' correctSize=' + correctSize + ' correctPixel=' + correctPixel
   };
 }
-VALIDATIONS.push(validate_phase14c_drawBufferFrame);
+VALIDATIONS.push(validate_phase14d_pixelBufferToCanvas);
+
+/**
+ * @description Validates renderBufferFrame is exported as a function from buffer-phases.js.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14d_renderBufferFrame() {
+  var pass = typeof renderBufferFrame === 'function';
+  return {
+    pass: pass,
+    name: 'phase14d_renderBufferFrame',
+    detail: pass
+      ? 'renderBufferFrame is exported as a function'
+      : 'renderBufferFrame is ' + typeof renderBufferFrame
+  };
+}
+VALIDATIONS.push(validate_phase14d_renderBufferFrame);
+
+/**
+ * @description Validates that VIDEO_BUFFER_SLIDE_MS is less than both OPEN and CLOSE durations.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14d_slideTimingConsistency() {
+  var slideOk = CONFIG.VIDEO_BUFFER_SLIDE_MS < CONFIG.VIDEO_BUFFER_OPEN_MS;
+  var closeOk = CONFIG.VIDEO_BUFFER_SLIDE_MS < CONFIG.VIDEO_BUFFER_CLOSE_MS;
+  var pass = slideOk && closeOk;
+  return {
+    pass: pass,
+    name: 'phase14d_slideTimingConsistency',
+    detail: pass
+      ? 'SLIDE(' + CONFIG.VIDEO_BUFFER_SLIDE_MS + ') < OPEN(' + CONFIG.VIDEO_BUFFER_OPEN_MS +
+        ') and CLOSE(' + CONFIG.VIDEO_BUFFER_CLOSE_MS + ')'
+      : 'slideOk=' + slideOk + ' closeOk=' + closeOk
+  };
+}
+VALIDATIONS.push(validate_phase14d_slideTimingConsistency);
 
 // ─── Validation Runner ───
 
