@@ -1,17 +1,13 @@
 <progress>
-  <phase>Phase 16: Offline video re-rendering for high-quality downloads</phase>
+  <phase>Phase 17: Improve in-flight pixel visibility</phase>
   <status>IN PROGRESS</status>
   <last_completed_step>IMPLEMENT</last_completed_step>
   <next_step>VERIFY END-TO-END</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/video/recorder.js, js/animation/engine.js, js/animation/buffer-phases.js, js/state-management.js, js/events.js, js/validation/validations.js, js/utils.js</files_read_this_session>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/utils.js, js/animation/engine.js, js/animation/buffer-phases.js, js/video/offline-render.js, js/video/render-phases.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Removed live MediaRecorder capture from engine.js and buffer-phases.js. Added CONFIG.VIDEO_BITRATE
-    (12 Mbps). Created js/video/render-phases.js (phase renderers) and js/video/offline-render.js
-    (main offline render orchestrator using captureStream(0) + requestFrame() with setTimeout pacing).
-    downloadVideo() in state-management.js now triggers offline render on click with progress feedback
-    on the button text. State fields mediaRecorder/recordedChunks replaced by recordedVideoBlob.
-    Validations updated: Phase 12 checks for new state shape, Phase 15 replaced with Phase 16
-    validations for CONFIG.VIDEO_BITRATE, renderOfflineVideo export, and startRecording removal.
+    Added CONFIG.PIXEL_FLIGHT_SIZE (default 2). Modified the pixel rendering loops in both
+    engine.js (live animation) and render-phases.js (offline video) to draw in-flight pixels
+    as 2x2 blocks in ImageData. Settled and waiting pixels remain 1x1. Added Phase 17 validations.
   </plan_summary>
   <blockers>none</blockers>
 </progress>

@@ -1299,29 +1299,29 @@ VALIDATIONS.push(validate_phase17_configPixelFlightSize);
  * @returns {{ pass: boolean, name: string, detail: string }}
  */
 function validate_phase17_inflightPixelSize() {
-  // Build a tiny 4x4 mapping with one pixel, simulate mid-flight rendering
-  var size = 4;
-  var gapPx = 1;
+  // Use 64x64 so ARC_MAGNITUDE (15px) doesn't push pixels out of bounds
+  var size = 64;
+  var gapPx = 4;
   var cw = size * 2 + gapPx;
   var canvas = document.createElement('canvas');
   canvas.width = cw;
   canvas.height = size;
   var ctx = canvas.getContext('2d');
 
-  // Create minimal mapping: one pixel from (0,0) to (size+gapPx, 0)
+  // Place pixel at center so arc stays in bounds
+  var centerIdx = 32 * size + 32;
   var mapping = [{
-    sourceIndex: 0, targetIndex: 0,
+    sourceIndex: centerIdx, targetIndex: centerIdx,
     r: 255, g: 0, b: 0, a: 255, luminance: 76
   }];
   var arrays = buildAnimationArrays(mapping, size, gapPx);
 
-  // Simulate mid-flight: set startTime so pixel is at t=0.5
+  // Simulate mid-flight at t=0.5
   var tweenDur = CONFIG.TWEEN_DURATION_MS;
   var fakeStart = 1000;
   arrays.startTimes[0] = fakeStart;
   var midTimestamp = fakeStart + tweenDur * 0.5;
 
-  // Render using the same logic as engine.js animation loop
   var imageData = ctx.createImageData(cw, size);
   var pixels = imageData.data;
   var flightSize = CONFIG.PIXEL_FLIGHT_SIZE;
@@ -1329,13 +1329,13 @@ function validate_phase17_inflightPixelSize() {
   var tx = arrays.targetXY[0], ty = arrays.targetXY[1];
   var pixelElapsed = midTimestamp - fakeStart;
   var t = pixelElapsed / tweenDur;
-  var et = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  var et = easeInOutCubic(t);
   var arc = 4 * et * (1 - et);
   var px = sx + (tx - sx) * et + Math.sin(0) * CONFIG.ARC_MAGNITUDE * arc;
   var py = sy + (ty - sy) * et + Math.cos(0) * CONFIG.ARC_MAGNITUDE * arc;
   var ix = Math.round(px), iy = Math.round(py);
 
-  // Write NxN block (mimicking what engine.js should do for in-flight pixels)
+  // Write NxN block (mimicking what engine.js does for in-flight pixels)
   var half = Math.floor(flightSize / 2);
   var written = 0;
   for (var dy = -half; dy < flightSize - half; dy++) {
@@ -1350,7 +1350,6 @@ function validate_phase17_inflightPixelSize() {
   }
   ctx.putImageData(imageData, 0, 0);
 
-  // Verify more than 1 pixel was written
   var pass = written > 1 && flightSize >= 2;
   return {
     pass: pass,

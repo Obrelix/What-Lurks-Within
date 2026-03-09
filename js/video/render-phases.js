@@ -55,12 +55,15 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
   var imageData = ctx.createImageData(canvasWidth, canvasHeight);
   var pixels = imageData.data;
   var settled = 0;
+  var flightSize = CONFIG.PIXEL_FLIGHT_SIZE;
+  var halfFlight = Math.floor(flightSize / 2);
 
   for (var i = 0; i < count; i++) {
     var dep = departures[i];
     var sx = sourceXY[i * 2], sy = sourceXY[i * 2 + 1];
     var tx = targetXY[i * 2], ty = targetXY[i * 2 + 1];
     var px, py;
+    var inFlight = false;
 
     if (elapsed < dep) {
       px = sx; py = sy;
@@ -73,17 +76,29 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
         var arc = 4 * t * (1 - t);
         px = sx + (tx - sx) * t + Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arc;
         py = sy + (ty - sy) * t + Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arc;
+        inFlight = true;
       }
     }
 
     var ix = Math.round(px), iy = Math.round(py);
-    if (ix < 0) ix = 0; if (ix >= canvasWidth) ix = canvasWidth - 1;
-    if (iy < 0) iy = 0; if (iy >= canvasHeight) iy = canvasHeight - 1;
-    var off = (iy * canvasWidth + ix) * 4;
-    pixels[off] = colors[i * 4];
-    pixels[off + 1] = colors[i * 4 + 1];
-    pixels[off + 2] = colors[i * 4 + 2];
-    pixels[off + 3] = colors[i * 4 + 3];
+    var cr = colors[i * 4], cg = colors[i * 4 + 1], cb = colors[i * 4 + 2], ca = colors[i * 4 + 3];
+    if (inFlight) {
+      for (var dy = -halfFlight; dy < flightSize - halfFlight; dy++) {
+        var wy = iy + dy;
+        if (wy < 0 || wy >= canvasHeight) continue;
+        for (var dx = -halfFlight; dx < flightSize - halfFlight; dx++) {
+          var wx = ix + dx;
+          if (wx < 0 || wx >= canvasWidth) continue;
+          var off = (wy * canvasWidth + wx) * 4;
+          pixels[off] = cr; pixels[off + 1] = cg; pixels[off + 2] = cb; pixels[off + 3] = ca;
+        }
+      }
+    } else {
+      if (ix < 0) ix = 0; if (ix >= canvasWidth) ix = canvasWidth - 1;
+      if (iy < 0) iy = 0; if (iy >= canvasHeight) iy = canvasHeight - 1;
+      var off = (iy * canvasWidth + ix) * 4;
+      pixels[off] = cr; pixels[off + 1] = cg; pixels[off + 2] = cb; pixels[off + 3] = ca;
+    }
   }
 
   ctx.putImageData(imageData, 0, 0);
