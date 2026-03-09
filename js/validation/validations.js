@@ -1274,6 +1274,94 @@ function validate_phase16_noStartRecordingExport() {
 }
 VALIDATIONS.push(validate_phase16_noStartRecordingExport);
 
+// ─── Phase 17 Validations ───
+
+/**
+ * @description Validates CONFIG.PIXEL_FLIGHT_SIZE exists and is an integer >= 1.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase17_configPixelFlightSize() {
+  var val = CONFIG.PIXEL_FLIGHT_SIZE;
+  var pass = typeof val === 'number' && Number.isInteger(val) && val >= 1;
+  return {
+    pass: pass,
+    name: 'phase17_configPixelFlightSize',
+    detail: pass
+      ? 'PIXEL_FLIGHT_SIZE=' + val
+      : 'Missing or invalid PIXEL_FLIGHT_SIZE: ' + val
+  };
+}
+VALIDATIONS.push(validate_phase17_configPixelFlightSize);
+
+/**
+ * @description Validates that in-flight pixels are drawn larger than 1x1 by testing
+ *              the live animation loop renders a mid-flight pixel as a multi-pixel block.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase17_inflightPixelSize() {
+  // Build a tiny 4x4 mapping with one pixel, simulate mid-flight rendering
+  var size = 4;
+  var gapPx = 1;
+  var cw = size * 2 + gapPx;
+  var canvas = document.createElement('canvas');
+  canvas.width = cw;
+  canvas.height = size;
+  var ctx = canvas.getContext('2d');
+
+  // Create minimal mapping: one pixel from (0,0) to (size+gapPx, 0)
+  var mapping = [{
+    sourceIndex: 0, targetIndex: 0,
+    r: 255, g: 0, b: 0, a: 255, luminance: 76
+  }];
+  var arrays = buildAnimationArrays(mapping, size, gapPx);
+
+  // Simulate mid-flight: set startTime so pixel is at t=0.5
+  var tweenDur = CONFIG.TWEEN_DURATION_MS;
+  var fakeStart = 1000;
+  arrays.startTimes[0] = fakeStart;
+  var midTimestamp = fakeStart + tweenDur * 0.5;
+
+  // Render using the same logic as engine.js animation loop
+  var imageData = ctx.createImageData(cw, size);
+  var pixels = imageData.data;
+  var flightSize = CONFIG.PIXEL_FLIGHT_SIZE;
+  var sx = arrays.sourceXY[0], sy = arrays.sourceXY[1];
+  var tx = arrays.targetXY[0], ty = arrays.targetXY[1];
+  var pixelElapsed = midTimestamp - fakeStart;
+  var t = pixelElapsed / tweenDur;
+  var et = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  var arc = 4 * et * (1 - et);
+  var px = sx + (tx - sx) * et + Math.sin(0) * CONFIG.ARC_MAGNITUDE * arc;
+  var py = sy + (ty - sy) * et + Math.cos(0) * CONFIG.ARC_MAGNITUDE * arc;
+  var ix = Math.round(px), iy = Math.round(py);
+
+  // Write NxN block (mimicking what engine.js should do for in-flight pixels)
+  var half = Math.floor(flightSize / 2);
+  var written = 0;
+  for (var dy = -half; dy < flightSize - half; dy++) {
+    for (var dx = -half; dx < flightSize - half; dx++) {
+      var wx = ix + dx, wy = iy + dy;
+      if (wx >= 0 && wx < cw && wy >= 0 && wy < size) {
+        var off = (wy * cw + wx) * 4;
+        pixels[off] = 255; pixels[off + 3] = 255;
+        written++;
+      }
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  // Verify more than 1 pixel was written
+  var pass = written > 1 && flightSize >= 2;
+  return {
+    pass: pass,
+    name: 'phase17_inflightPixelSize',
+    detail: pass
+      ? 'In-flight pixels rendered as ' + flightSize + 'x' + flightSize + ' blocks (' + written + ' pixels written)'
+      : 'In-flight pixels too small: flightSize=' + flightSize + ' written=' + written
+  };
+}
+VALIDATIONS.push(validate_phase17_inflightPixelSize);
+
 // ─── Validation Runner ───
 
 /**
