@@ -7,7 +7,7 @@ import { showScreen } from '../ui/screens.js';
 import { showToast } from '../ui/toast.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
-import { startRecording, stopRecording } from '../video/recorder.js';
+import { startRecording, stopRecording, createRecordingCanvas, updateRecordingFrame } from '../video/recorder.js';
 
 // ═══════════════════════════════════════════
 // ANIMATION ENGINE
@@ -105,9 +105,12 @@ export function startReveal() {
       APP_STATE.animBatchIndex = 0;
       APP_STATE.animSettled = 0;
 
+      var recCanvas = createRecordingCanvas(size);
+      APP_STATE.recordingCanvas = recCanvas;
+
       if (overlay) overlay.classList.remove('active');
       showScreen('animation');
-      startRecording(canvas);
+      startRecording(recCanvas);
       APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
     } catch (err) {
       if (overlay) overlay.classList.remove('active');
@@ -198,6 +201,10 @@ function animationLoop(timestamp) {
   }
 
   ctx.putImageData(imageData, 0, 0);
+
+  if (APP_STATE.recordingCanvas) {
+    updateRecordingFrame(canvas, APP_STATE.recordingCanvas, APP_STATE.animImageSize, APP_STATE.animGapPx);
+  }
 
   APP_STATE.animSettled = settled;
   var pct = count > 0 ? (settled / count) * 100 : 0;

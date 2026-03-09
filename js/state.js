@@ -34,8 +34,9 @@ export const APP_STATE = {
   rankedTargets: null,
   rankedTargetIndex: 0,
 
-  // Video recording (Phase 12)
+  // Video recording (Phase 12/14)
   mediaRecorder: null,
   recordedChunks: [],
-  resolvedVideoMime: null
+  resolvedVideoMime: null,
+  recordingCanvas: null
 };

@@ -30,6 +30,59 @@ export function resolveVideoMimeType() {
   return 'video/webm';
 }
 
+// ═══════════════════════════════════════════
+// RECORDING CANVAS + WATERMARK
+// ═══════════════════════════════════════════
+
+/**
+ * @description Creates a hidden off-screen canvas for recording the target side only.
+ * @param {number} size - Square dimension (matches image resolution)
+ * @returns {HTMLCanvasElement}
+ */
+export function createRecordingCanvas(size) {
+  var canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  return canvas;
+}
+
+/**
+ * @description Draws the watermark text onto a canvas context (bottom-right corner).
+ * @param {CanvasRenderingContext2D} ctx - Target context
+ * @param {number} size - Square dimension of the canvas
+ */
+export function drawWatermark(ctx, size) {
+  var fontSize = Math.max(10, Math.round(size * CONFIG.WATERMARK_FONT_SIZE_RATIO));
+  var padding = Math.max(4, Math.round(size * CONFIG.WATERMARK_PADDING_RATIO));
+  ctx.save();
+  ctx.font = fontSize + 'px "Share Tech Mono", monospace';
+  ctx.globalAlpha = CONFIG.WATERMARK_OPACITY;
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(CONFIG.WATERMARK_TEXT, size - padding, size - padding);
+  ctx.restore();
+}
+
+/**
+ * @description Copies the target region from the display canvas to the recording canvas,
+ *              then draws the watermark overlay.
+ * @param {HTMLCanvasElement} displayCanvas - The dual-layout animation canvas
+ * @param {HTMLCanvasElement} recordingCanvas - The square recording canvas
+ * @param {number} size - Image square dimension
+ * @param {number} gapPx - Gap width between source and target on the display canvas
+ */
+export function updateRecordingFrame(displayCanvas, recordingCanvas, size, gapPx) {
+  var ctx = recordingCanvas.getContext('2d');
+  if (!ctx) return;
+  ctx.drawImage(displayCanvas, size + gapPx, 0, size, size, 0, 0, size, size);
+  drawWatermark(ctx, size);
+}
+
+// ═══════════════════════════════════════════
+// START / STOP RECORDING
+// ═══════════════════════════════════════════
+
 /**
  * @description Starts recording the given canvas element.
  * @param {HTMLCanvasElement} canvas - The canvas to record

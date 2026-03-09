@@ -9,7 +9,7 @@ import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
 } from '../image/matching.js';
-import { resolveVideoMimeType } from '../video/recorder.js';
+import { resolveVideoMimeType, createRecordingCanvas, drawWatermark } from '../video/recorder.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
 import { buildAnimationArrays } from '../animation/engine.js';
@@ -1019,6 +1019,89 @@ function validate_phase14a_resolveFunction() {
   };
 }
 VALIDATIONS.push(validate_phase14a_resolveFunction);
+
+// ─── Phase 14b Validations ───
+
+/**
+ * @description Validates CONFIG has watermark keys with correct types.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14b_watermarkConfig() {
+  var hasText = typeof CONFIG.WATERMARK_TEXT === 'string' && CONFIG.WATERMARK_TEXT.length > 0;
+  var hasFont = typeof CONFIG.WATERMARK_FONT_SIZE_RATIO === 'number' && CONFIG.WATERMARK_FONT_SIZE_RATIO > 0;
+  var hasOpacity = typeof CONFIG.WATERMARK_OPACITY === 'number' && CONFIG.WATERMARK_OPACITY > 0 && CONFIG.WATERMARK_OPACITY <= 1;
+  var hasPad = typeof CONFIG.WATERMARK_PADDING_RATIO === 'number' && CONFIG.WATERMARK_PADDING_RATIO > 0;
+  var pass = hasText && hasFont && hasOpacity && hasPad;
+  return {
+    pass: pass,
+    name: 'phase14b_watermarkConfig',
+    detail: pass
+      ? 'WATERMARK_TEXT="' + CONFIG.WATERMARK_TEXT + '" opacity=' + CONFIG.WATERMARK_OPACITY
+      : 'text=' + hasText + ' font=' + hasFont + ' opacity=' + hasOpacity + ' pad=' + hasPad
+  };
+}
+VALIDATIONS.push(validate_phase14b_watermarkConfig);
+
+/**
+ * @description Validates APP_STATE has recordingCanvas field.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14b_recordingCanvasField() {
+  var pass = 'recordingCanvas' in APP_STATE;
+  return {
+    pass: pass,
+    name: 'phase14b_recordingCanvasField',
+    detail: pass
+      ? 'APP_STATE.recordingCanvas exists'
+      : 'recordingCanvas not found in APP_STATE'
+  };
+}
+VALIDATIONS.push(validate_phase14b_recordingCanvasField);
+
+/**
+ * @description Validates createRecordingCanvas returns a canvas of correct size.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14b_createRecordingCanvas() {
+  var isFn = typeof createRecordingCanvas === 'function';
+  if (!isFn) return { pass: false, name: 'phase14b_createRecordingCanvas', detail: 'not a function' };
+  var c = createRecordingCanvas(64);
+  var pass = c instanceof HTMLCanvasElement && c.width === 64 && c.height === 64;
+  return {
+    pass: pass,
+    name: 'phase14b_createRecordingCanvas',
+    detail: pass
+      ? 'Created 64x64 off-screen canvas'
+      : 'width=' + (c ? c.width : 'null') + ' height=' + (c ? c.height : 'null')
+  };
+}
+VALIDATIONS.push(validate_phase14b_createRecordingCanvas);
+
+/**
+ * @description Validates drawWatermark is a function that draws on a canvas context.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14b_drawWatermark() {
+  var isFn = typeof drawWatermark === 'function';
+  if (!isFn) return { pass: false, name: 'phase14b_drawWatermark', detail: 'not a function' };
+  var c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  var ctx = c.getContext('2d');
+  drawWatermark(ctx, 64);
+  var data = ctx.getImageData(0, 0, 64, 64).data;
+  var hasContent = false;
+  for (var i = 3; i < data.length; i += 4) {
+    if (data[i] > 0) { hasContent = true; break; }
+  }
+  return {
+    pass: hasContent,
+    name: 'phase14b_drawWatermark',
+    detail: hasContent
+      ? 'drawWatermark rendered visible pixels'
+      : 'No visible pixels after drawWatermark'
+  };
+}
+VALIDATIONS.push(validate_phase14b_drawWatermark);
 
 // ─── Validation Runner ───
 

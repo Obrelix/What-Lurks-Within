@@ -61,6 +61,12 @@ export const CONFIG = {
     'video/webm'
   ],
 
+  // Watermark
+  WATERMARK_TEXT: 'What Lurks Within',
+  WATERMARK_FONT_SIZE_RATIO: 0.03,
+  WATERMARK_OPACITY: 0.25,
+  WATERMARK_PADDING_RATIO: 0.02,
+
   DEFAULT_IMAGE_PATHS: [
     'defaultImages/img1.jpg',
     'defaultImages/img2.jpg',
