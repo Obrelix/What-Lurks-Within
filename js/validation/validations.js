@@ -2,7 +2,7 @@
 
 import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
-import { calcLuminance, calcHue, easeInOutCubic, pixelSortComparator } from '../utils.js';
+import { calcLuminance, calcHue, easeInOutCubic, easeOutExpo, easeOutBack, easeOutQuart, pixelSortComparator } from '../utils.js';
 import { showScreen } from '../ui/screens.js';
 import { computeCoverCrop, createPixelBufferFromData, reprocessOnResolutionChange } from '../image/pipeline.js';
 import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
@@ -1406,6 +1406,172 @@ function validate_phase17_drawOrder() {
   };
 }
 VALIDATIONS.push(validate_phase17_drawOrder);
+
+// ─── Phase 18 Validations ───
+
+/**
+ * @description Validates that CONFIG has TWEEN_SPEED_VARIANCE key with a value between 0 and 1.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_configSpeedVariance() {
+  var has = 'TWEEN_SPEED_VARIANCE' in CONFIG;
+  var val = CONFIG.TWEEN_SPEED_VARIANCE;
+  var valid = has && typeof val === 'number' && val >= 0 && val <= 1;
+  return {
+    pass: valid,
+    name: 'phase18_configSpeedVariance',
+    detail: valid
+      ? 'TWEEN_SPEED_VARIANCE=' + val
+      : 'Missing or invalid TWEEN_SPEED_VARIANCE (expected number 0..1, got ' + val + ')'
+  };
+}
+VALIDATIONS.push(validate_phase18_configSpeedVariance);
+
+/**
+ * @description Validates that new easing functions exist and produce correct boundary values.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_easingFunctions() {
+  var errors = [];
+  var fns = [
+    { name: 'easeOutExpo', fn: easeOutExpo },
+    { name: 'easeOutBack', fn: easeOutBack },
+    { name: 'easeOutQuart', fn: easeOutQuart }
+  ];
+  for (var i = 0; i < fns.length; i++) {
+    var f = fns[i];
+    if (typeof f.fn !== 'function') { errors.push(f.name + ' not a function'); continue; }
+    var v0 = f.fn(0), v1 = f.fn(1);
+    if (Math.abs(v0) > 0.001) errors.push(f.name + '(0)=' + v0 + ' expected ~0');
+    // easeOutBack overshoots then returns to 1, so f(1) should be ~1
+    if (Math.abs(v1 - 1) > 0.001) errors.push(f.name + '(1)=' + v1 + ' expected ~1');
+  }
+  var pass = errors.length === 0;
+  return {
+    pass: pass,
+    name: 'phase18_easingFunctions',
+    detail: pass ? 'All 3 easing functions have correct boundaries' : errors.join('; ')
+  };
+}
+VALIDATIONS.push(validate_phase18_easingFunctions);
+
+/**
+ * @description Validates that buildAnimationArrays returns tweenDurations and easingIndices arrays.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_animArraysHavePerPixelData() {
+  var mapping = [
+    { sourceIndex: 0, targetIndex: 1, r: 100, g: 100, b: 100, a: 255, luminance: 100 },
+    { sourceIndex: 2, targetIndex: 3, r: 200, g: 200, b: 200, a: 255, luminance: 200 }
+  ];
+  var result = buildAnimationArrays(mapping, 4, 1);
+  var hasDurations = result.tweenDurations instanceof Float32Array && result.tweenDurations.length === 2;
+  var hasIndices = result.easingIndices instanceof Uint8Array && result.easingIndices.length === 2;
+  var pass = hasDurations && hasIndices;
+  return {
+    pass: pass,
+    name: 'phase18_animArraysHavePerPixelData',
+    detail: pass
+      ? 'tweenDurations (Float32Array) and easingIndices (Uint8Array) present'
+      : 'Missing: durations=' + hasDurations + ' indices=' + hasIndices
+  };
+}
+VALIDATIONS.push(validate_phase18_animArraysHavePerPixelData);
+
+/**
+ * @description Validates that per-pixel durations vary around TWEEN_DURATION_MS within the expected range.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_durationVariance() {
+  var count = 200;
+  var mapping = [];
+  for (var i = 0; i < count; i++) {
+    mapping.push({ sourceIndex: i, targetIndex: i, r: 128, g: 128, b: 128, a: 255, luminance: 128 });
+  }
+  var result = buildAnimationArrays(mapping, 16, 1);
+  var durations = result.tweenDurations;
+  var baseDur = CONFIG.TWEEN_DURATION_MS;
+  var variance = CONFIG.TWEEN_SPEED_VARIANCE;
+  var minExpected = baseDur * (1 - variance);
+  var maxExpected = baseDur * (1 + variance);
+  var allInRange = true;
+  var hasVariation = false;
+  var first = durations[0];
+  for (var i = 0; i < count; i++) {
+    if (durations[i] < minExpected - 1 || durations[i] > maxExpected + 1) allInRange = false;
+    if (Math.abs(durations[i] - first) > 1) hasVariation = true;
+  }
+  var pass = allInRange && hasVariation;
+  return {
+    pass: pass,
+    name: 'phase18_durationVariance',
+    detail: pass
+      ? 'Durations vary within [' + minExpected.toFixed(0) + ', ' + maxExpected.toFixed(0) + ']ms'
+      : 'inRange=' + allInRange + ' hasVariation=' + hasVariation
+  };
+}
+VALIDATIONS.push(validate_phase18_durationVariance);
+
+/**
+ * @description Validates that easing indices are deterministic (same input → same output).
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_deterministicAssignment() {
+  var mapping = [];
+  for (var i = 0; i < 50; i++) {
+    mapping.push({ sourceIndex: i, targetIndex: i, r: 128, g: 128, b: 128, a: 255, luminance: 128 });
+  }
+  var r1 = buildAnimationArrays(mapping, 8, 1);
+  var r2 = buildAnimationArrays(mapping, 8, 1);
+  var match = true;
+  for (var i = 0; i < 50; i++) {
+    if (r1.tweenDurations[i] !== r2.tweenDurations[i]) { match = false; break; }
+    if (r1.easingIndices[i] !== r2.easingIndices[i]) { match = false; break; }
+  }
+  return {
+    pass: match,
+    name: 'phase18_deterministicAssignment',
+    detail: match
+      ? 'Per-pixel durations and easing indices are deterministic'
+      : 'Non-deterministic: different results for same input'
+  };
+}
+VALIDATIONS.push(validate_phase18_deterministicAssignment);
+
+/**
+ * @description Validates that engine.js and render-phases.js use per-pixel tween durations and easing selection.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_perPixelUsage() {
+  var errors = [];
+  var engineSrc = '';
+  var renderSrc = '';
+  try {
+    var xhr1 = new XMLHttpRequest();
+    xhr1.open('GET', 'js/animation/engine.js', false);
+    xhr1.send();
+    engineSrc = xhr1.responseText;
+    var xhr2 = new XMLHttpRequest();
+    xhr2.open('GET', 'js/video/render-phases.js', false);
+    xhr2.send();
+    renderSrc = xhr2.responseText;
+  } catch (e) {
+    return { pass: false, name: 'phase18_perPixelUsage', detail: 'Failed to read source: ' + e.message };
+  }
+  // Both should reference tweenDurations for per-pixel duration
+  if (engineSrc.indexOf('tweenDurations') === -1) errors.push('engine.js missing tweenDurations usage');
+  if (renderSrc.indexOf('tweenDurations') === -1) errors.push('render-phases.js missing tweenDurations usage');
+  // Both should reference easingIndices for per-pixel easing
+  if (engineSrc.indexOf('easingIndices') === -1) errors.push('engine.js missing easingIndices usage');
+  if (renderSrc.indexOf('easingIndices') === -1) errors.push('render-phases.js missing easingIndices usage');
+  var pass = errors.length === 0;
+  return {
+    pass: pass,
+    name: 'phase18_perPixelUsage',
+    detail: pass ? 'Both renderers use per-pixel durations and easing' : errors.join('; ')
+  };
+}
+VALIDATIONS.push(validate_phase18_perPixelUsage);
 
 // ─── Validation Runner ───
 

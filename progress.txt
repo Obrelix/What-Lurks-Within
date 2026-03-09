@@ -1,14 +1,16 @@
 <progress>
-  <phase>Phase 17b: Improve in-flight pixel visibility on source side</phase>
+  <phase>Phase 18: Speed Variation and Mixed Easing Curves</phase>
   <status>IN PROGRESS</status>
-  <last_completed_step>IMPLEMENT</last_completed_step>
-  <next_step>VERIFY END-TO-END</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/animation/engine.js, js/video/render-phases.js, js/validation/validations.js</files_read_this_session>
+  <last_completed_step>THINK HARD</last_completed_step>
+  <next_step>WRITE VALIDATIONS FIRST</next_step>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/animation/engine.js, js/animation/buffer-phases.js, js/video/render-phases.js, js/utils.js, js/state.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Fixed draw order bug: in-flight pixels were overwritten by stationary source pixels drawn
-    later in the same loop. Split single-pass rendering into two passes in both engine.js and
-    render-phases.js: pass 1 draws stationary pixels, pass 2 draws in-flight pixels on top.
-    Added validate_phase17_drawOrder validation that checks for two-pass structure.
+    Add per-pixel speed variation and mixed easing curves to the in-flight animation.
+    New CONFIG keys: TWEEN_SPEED_VARIANCE (±40% duration spread) and EASING_COUNT (3 easing functions).
+    New easing functions in utils.js: easeOutExpo, easeOutBack, easeOutQuart.
+    buildAnimationArrays generates per-pixel tweenDurations (Float32Array) and easingIndices (Uint8Array)
+    using deterministic index-based hashing. Both engine.js and render-phases.js use per-pixel values
+    instead of the single CONFIG.TWEEN_DURATION_MS and easeInOutCubic for in-flight interpolation.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
