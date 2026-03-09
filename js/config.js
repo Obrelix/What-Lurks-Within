@@ -55,7 +55,11 @@ export const CONFIG = {
   HISTOGRAM_BINS: 32,
   // Video recording
   VIDEO_FRAMERATE: 30,
-  VIDEO_MIME_TYPE: 'video/webm;codecs=vp9',
+  VIDEO_MIME_PRIORITY: [
+    'video/mp4;codecs=avc1.42E01E',
+    'video/webm;codecs=vp9',
+    'video/webm'
+  ],
 
   DEFAULT_IMAGE_PATHS: [
     'defaultImages/img1.jpg',

@@ -1,14 +1,15 @@
 <progress>
-  <phase>Phase 13: Fix quality change not reprocessing loaded images</phase>
+  <phase>Phase 14a: Video format detection — runtime MP4/WebM selection</phase>
   <status>IN PROGRESS</status>
-  <last_completed_step>IMPLEMENT</last_completed_step>
-  <next_step>VERIFY END-TO-END</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/events.js, js/image/pipeline.js, js/image/matching.js, js/image/procedural.js, js/animation/engine.js, js/validation/validations.js</files_read_this_session>
+  <last_completed_step>EXPLORE</last_completed_step>
+  <next_step>THINK HARD</next_step>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/video/recorder.js, js/state-management.js, js/animation/engine.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Added reprocessOnResolutionChange() in pipeline.js that reloads images from stored object URLs
-    and recreates sourceBuffer/targetBuffer at the new resolution when the quality dropdown changes.
-    Updated events.js quality change handler to call it. Also clears rankedTargets (stale at old
-    resolution). Added two validations: function existence and Promise return type.
+    Replace CONFIG.VIDEO_MIME_TYPE (single string) with CONFIG.VIDEO_MIME_PRIORITY (ordered array).
+    startRecording() iterates the list and picks the first supported MIME via isTypeSupported().
+    Add APP_STATE.resolvedVideoMime to store the chosen MIME. downloadVideo() reads it to set the
+    correct Blob type and file extension (.mp4 or .webm). resetState() clears resolvedVideoMime.
+    Files: config.js, state.js, recorder.js, state-management.js, validations.js.
   </plan_summary>
   <blockers>none</blockers>
 </progress>

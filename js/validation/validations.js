@@ -9,6 +9,7 @@ import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
 } from '../image/matching.js';
+import { resolveVideoMimeType } from '../video/recorder.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
 import { buildAnimationArrays } from '../animation/engine.js';
@@ -826,18 +827,18 @@ VALIDATIONS.push(validate_phase9_rankAndFilter);
 // ─── Phase 12 Validations ───
 
 /**
- * @description Validates CONFIG has VIDEO_FRAMERATE and VIDEO_MIME_TYPE with correct types.
+ * @description Validates CONFIG has VIDEO_FRAMERATE and VIDEO_MIME_PRIORITY with correct types.
  * @returns {{ pass: boolean, name: string, detail: string }}
  */
 function validate_phase12_configVideoKeys() {
   var hasFps = typeof CONFIG.VIDEO_FRAMERATE === 'number' && CONFIG.VIDEO_FRAMERATE > 0;
-  var hasMime = typeof CONFIG.VIDEO_MIME_TYPE === 'string' && CONFIG.VIDEO_MIME_TYPE.length > 0;
+  var hasMime = Array.isArray(CONFIG.VIDEO_MIME_PRIORITY) && CONFIG.VIDEO_MIME_PRIORITY.length > 0;
   var pass = hasFps && hasMime;
   return {
     pass: pass,
     name: 'phase12_configVideoKeys',
     detail: pass
-      ? 'VIDEO_FRAMERATE=' + CONFIG.VIDEO_FRAMERATE + ' VIDEO_MIME_TYPE=' + CONFIG.VIDEO_MIME_TYPE
+      ? 'VIDEO_FRAMERATE=' + CONFIG.VIDEO_FRAMERATE + ' VIDEO_MIME_PRIORITY has ' + CONFIG.VIDEO_MIME_PRIORITY.length + ' entries'
       : 'hasFps=' + hasFps + ' hasMime=' + hasMime
   };
 }
@@ -963,6 +964,61 @@ function validate_phase13_reprocessResizesSource() {
   };
 }
 VALIDATIONS.push(validate_phase13_reprocessResizesSource);
+
+// ─── Phase 14a Validations ───
+
+/**
+ * @description Validates CONFIG.VIDEO_MIME_PRIORITY is a non-empty array of strings.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14a_mimePriorityConfig() {
+  var has = Array.isArray(CONFIG.VIDEO_MIME_PRIORITY) && CONFIG.VIDEO_MIME_PRIORITY.length > 0;
+  var allStrings = has && CONFIG.VIDEO_MIME_PRIORITY.every(function(m) { return typeof m === 'string'; });
+  var pass = has && allStrings;
+  return {
+    pass: pass,
+    name: 'phase14a_mimePriorityConfig',
+    detail: pass
+      ? 'VIDEO_MIME_PRIORITY has ' + CONFIG.VIDEO_MIME_PRIORITY.length + ' entries'
+      : 'has=' + has + ' allStrings=' + allStrings
+  };
+}
+VALIDATIONS.push(validate_phase14a_mimePriorityConfig);
+
+/**
+ * @description Validates APP_STATE has resolvedVideoMime field.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14a_resolvedMimeField() {
+  var pass = 'resolvedVideoMime' in APP_STATE;
+  return {
+    pass: pass,
+    name: 'phase14a_resolvedMimeField',
+    detail: pass
+      ? 'APP_STATE.resolvedVideoMime exists'
+      : 'resolvedVideoMime not found in APP_STATE'
+  };
+}
+VALIDATIONS.push(validate_phase14a_resolvedMimeField);
+
+/**
+ * @description Validates resolveVideoMimeType is exported and returns a string.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14a_resolveFunction() {
+  var isFn = typeof resolveVideoMimeType === 'function';
+  var result = isFn ? resolveVideoMimeType() : null;
+  var isStr = typeof result === 'string' && result.length > 0;
+  var pass = isFn && isStr;
+  return {
+    pass: pass,
+    name: 'phase14a_resolveFunction',
+    detail: pass
+      ? 'resolveVideoMimeType() returned "' + result + '"'
+      : 'isFn=' + isFn + ' result=' + result
+  };
+}
+VALIDATIONS.push(validate_phase14a_resolveFunction);
 
 // ─── Validation Runner ───
 

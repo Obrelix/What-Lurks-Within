@@ -18,6 +18,19 @@ export function isRecordingSupported() {
 }
 
 /**
+ * @description Picks the first supported MIME type from CONFIG.VIDEO_MIME_PRIORITY.
+ * @returns {string} The best supported MIME type, or 'video/webm' as last resort
+ */
+export function resolveVideoMimeType() {
+  if (typeof MediaRecorder === 'undefined') return 'video/webm';
+  var list = CONFIG.VIDEO_MIME_PRIORITY;
+  for (var i = 0; i < list.length; i++) {
+    if (MediaRecorder.isTypeSupported(list[i])) return list[i];
+  }
+  return 'video/webm';
+}
+
+/**
  * @description Starts recording the given canvas element.
  * @param {HTMLCanvasElement} canvas - The canvas to record
  */
@@ -27,13 +40,11 @@ export function startRecording(canvas) {
     return;
   }
 
-  var stream = canvas.captureStream(CONFIG.VIDEO_FRAMERATE);
-  var mimeType = MediaRecorder.isTypeSupported(CONFIG.VIDEO_MIME_TYPE)
-    ? CONFIG.VIDEO_MIME_TYPE
-    : 'video/webm';
-
+  var mimeType = resolveVideoMimeType();
+  APP_STATE.resolvedVideoMime = mimeType;
   APP_STATE.recordedChunks = [];
 
+  var stream = canvas.captureStream(CONFIG.VIDEO_FRAMERATE);
   var recorder = new MediaRecorder(stream, { mimeType: mimeType });
 
   recorder.ondataavailable = function(e) {

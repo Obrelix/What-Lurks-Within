@@ -36,5 +36,6 @@ export const APP_STATE = {
 
   // Video recording (Phase 12)
   mediaRecorder: null,
-  recordedChunks: []
+  recordedChunks: [],
+  resolvedVideoMime: null
 };

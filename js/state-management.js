@@ -48,6 +48,7 @@ export function resetState() {
   }
   APP_STATE.mediaRecorder = null;
   APP_STATE.recordedChunks = [];
+  APP_STATE.resolvedVideoMime = null;
   var videoBtn = document.getElementById('btn-download-video');
   if (videoBtn) videoBtn.disabled = true;
 
@@ -89,7 +90,7 @@ export function downloadResult() {
 }
 
 /**
- * @description Downloads the recorded animation as a WebM video file.
+ * @description Downloads the recorded animation as a video file (MP4 or WebM).
  */
 export function downloadVideo() {
   if (!APP_STATE.recordedChunks || APP_STATE.recordedChunks.length === 0) {
@@ -97,11 +98,13 @@ export function downloadVideo() {
     return;
   }
   try {
-    var blob = new Blob(APP_STATE.recordedChunks, { type: 'video/webm' });
+    var mime = APP_STATE.resolvedVideoMime || 'video/webm';
+    var ext = mime.startsWith('video/mp4') ? '.mp4' : '.webm';
+    var blob = new Blob(APP_STATE.recordedChunks, { type: mime });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'what-lurks-within-' + Date.now() + '.webm';
+    a.download = 'what-lurks-within-' + Date.now() + ext;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
