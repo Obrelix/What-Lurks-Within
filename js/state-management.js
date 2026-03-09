@@ -35,6 +35,8 @@ export function resetState() {
   APP_STATE.targetXY = null;
   APP_STATE.colors = null;
   APP_STATE.startTimes = null;
+  APP_STATE.tweenDurations = null;
+  APP_STATE.easingIndices = null;
   APP_STATE.animImageSize = null;
   APP_STATE.animGapPx = null;
   APP_STATE.pixelsPerMs = 0;

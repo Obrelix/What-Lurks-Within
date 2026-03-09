@@ -2,7 +2,7 @@
 
 import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
-import { easeInOutCubic } from '../utils.js';
+import { easeInOutCubic, EASING_FUNCTIONS } from '../utils.js';
 import { showScreen } from '../ui/screens.js';
 import { drawWatermark } from '../video/recorder.js';
 
@@ -11,11 +11,20 @@ import { drawWatermark } from '../video/recorder.js';
 // ═══════════════════════════════════════════
 
 /**
+ * @description Deterministic hash for per-pixel randomisation (Knuth multiplicative hash).
+ * @param {number} i - Pixel index
+ * @returns {number} Pseudo-random value in [0, 1)
+ */
+function pixelHash(i) {
+  return ((i * 2654435761) >>> 0) / 4294967296;
+}
+
+/**
  * @description Builds pre-allocated typed arrays for the animation loop.
  * @param {Array} mapping - The pixel mapping array
  * @param {number} width - Image width (square dimension)
  * @param {number} gapPx - Gap width in pixels between source and target rectangles
- * @returns {{ sourceXY: Float32Array, targetXY: Float32Array, colors: Uint8ClampedArray, startTimes: Float64Array }}
+ * @returns {{ sourceXY: Float32Array, targetXY: Float32Array, colors: Uint8ClampedArray, startTimes: Float64Array, tweenDurations: Float32Array, easingIndices: Uint8Array }}
  */
 export function buildAnimationArrays(mapping, width, gapPx) {
   var count = mapping.length;
@@ -23,7 +32,12 @@ export function buildAnimationArrays(mapping, width, gapPx) {
   var targetXY = new Float32Array(count * 2);
   var colors = new Uint8ClampedArray(count * 4);
   var startTimes = new Float64Array(count);
+  var tweenDurations = new Float32Array(count);
+  var easingIndices = new Uint8Array(count);
   var targetOffsetX = width + gapPx;
+  var baseDur = CONFIG.TWEEN_DURATION_MS;
+  var variance = CONFIG.TWEEN_SPEED_VARIANCE;
+  var easingCount = EASING_FUNCTIONS.length;
 
   for (var i = 0; i < count; i++) {
     var m = mapping[i];
@@ -36,9 +50,16 @@ export function buildAnimationArrays(mapping, width, gapPx) {
     colors[i * 4 + 2] = m.b;
     colors[i * 4 + 3] = m.a;
     startTimes[i] = 0;
+
+    var h = pixelHash(i);
+    tweenDurations[i] = baseDur * (1 + (h * 2 - 1) * variance);
+    easingIndices[i] = Math.floor(pixelHash(i + 99991) * easingCount);
   }
 
-  return { sourceXY: sourceXY, targetXY: targetXY, colors: colors, startTimes: startTimes };
+  return {
+    sourceXY: sourceXY, targetXY: targetXY, colors: colors, startTimes: startTimes,
+    tweenDurations: tweenDurations, easingIndices: easingIndices
+  };
 }
 
 // ═══════════════════════════════════════════

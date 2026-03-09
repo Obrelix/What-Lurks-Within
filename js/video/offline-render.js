@@ -19,8 +19,9 @@ import {
 function calcTotalDuration() {
   var openHold = Math.max(0, CONFIG.VIDEO_BUFFER_OPEN_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS);
   var openSlide = CONFIG.VIDEO_BUFFER_SLIDE_MS;
-  var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - CONFIG.TWEEN_DURATION_MS);
-  var animDuration = departureMs + CONFIG.TWEEN_DURATION_MS;
+  var maxTween = CONFIG.TWEEN_DURATION_MS * (1 + CONFIG.TWEEN_SPEED_VARIANCE);
+  var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - maxTween);
+  var animDuration = departureMs + maxTween;
   var closeSlide = CONFIG.VIDEO_BUFFER_SLIDE_MS;
   var closeHold = Math.max(0, CONFIG.VIDEO_BUFFER_CLOSE_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS);
   return openHold + openSlide + animDuration + closeSlide + closeHold;
@@ -101,12 +102,13 @@ export function renderOfflineVideo(onProgress) {
   var frameMs = 1000 / CONFIG.VIDEO_FRAMERATE;
   var totalFrames = Math.ceil(calcTotalDuration() / frameMs);
   var count = APP_STATE.mapping.length;
-  var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - CONFIG.TWEEN_DURATION_MS);
+  var maxTween = CONFIG.TWEEN_DURATION_MS * (1 + CONFIG.TWEEN_SPEED_VARIANCE);
+  var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - maxTween);
   var departures = buildDepartureTimes(count, count / departureMs);
   var bounds = [
     Math.max(0, CONFIG.VIDEO_BUFFER_OPEN_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS),
     CONFIG.VIDEO_BUFFER_SLIDE_MS,
-    departureMs + CONFIG.TWEEN_DURATION_MS,
+    departureMs + maxTween,
     CONFIG.VIDEO_BUFFER_SLIDE_MS
   ];
 

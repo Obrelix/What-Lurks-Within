@@ -2,7 +2,7 @@
 
 import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
-import { easeInOutCubic } from '../utils.js';
+import { EASING_FUNCTIONS } from '../utils.js';
 import { showScreen } from '../ui/screens.js';
 import { showToast } from '../ui/toast.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
@@ -46,6 +46,8 @@ export function startReveal() {
       APP_STATE.targetXY = arrays.targetXY;
       APP_STATE.colors = arrays.colors;
       APP_STATE.startTimes = arrays.startTimes;
+      APP_STATE.tweenDurations = arrays.tweenDurations;
+      APP_STATE.easingIndices = arrays.easingIndices;
       APP_STATE.animImageSize = size;
       APP_STATE.animGapPx = gapPx;
 
@@ -65,7 +67,8 @@ export function startReveal() {
       canvas.style.width = displayW + 'px';
       canvas.style.height = Math.floor(displayW / aspectRatio) + 'px';
 
-      var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - CONFIG.TWEEN_DURATION_MS);
+      var maxTween = CONFIG.TWEEN_DURATION_MS * (1 + CONFIG.TWEEN_SPEED_VARIANCE);
+      var departureMs = Math.max(1000, maxTween > 0 ? CONFIG.TARGET_DURATION_S * 1000 - maxTween : 1000);
       APP_STATE.pixelsPerMs = mapping.length / departureMs;
       APP_STATE.animationStartTime = null;
       APP_STATE.animBatchIndex = 0;
@@ -123,7 +126,8 @@ function animationLoop(timestamp) {
   var targetXY = APP_STATE.targetXY;
   var colors = APP_STATE.colors;
   var startTimes = APP_STATE.startTimes;
-  var tweenDur = CONFIG.TWEEN_DURATION_MS;
+  var tweenDurations = APP_STATE.tweenDurations;
+  var easingIndices = APP_STATE.easingIndices;
   var elapsed = timestamp - APP_STATE.animationStartTime;
   var idealIndex = Math.min(count, Math.floor(elapsed * APP_STATE.pixelsPerMs));
   var defRes = CONFIG.DEFAULT_RESOLUTION;
@@ -154,7 +158,7 @@ function animationLoop(timestamp) {
       px = sx; py = sy;
     } else {
       var pixelElapsed = timestamp - st;
-      if (pixelElapsed >= tweenDur) {
+      if (pixelElapsed >= tweenDurations[i]) {
         px = tx; py = ty; settled++;
       } else {
         continue;
@@ -173,10 +177,12 @@ function animationLoop(timestamp) {
     var st = startTimes[i];
     if (st === 0) continue;
     var pixelElapsed = timestamp - st;
-    if (pixelElapsed >= tweenDur) continue;
+    var dur = tweenDurations[i];
+    if (pixelElapsed >= dur) continue;
     var sx = sourceXY[i * 2], sy = sourceXY[i * 2 + 1];
     var tx = targetXY[i * 2], ty = targetXY[i * 2 + 1];
-    var t = easeInOutCubic(pixelElapsed / tweenDur);
+    var easeFn = EASING_FUNCTIONS[easingIndices[i]];
+    var t = easeFn(pixelElapsed / dur);
     var arcScale = 4 * t * (1 - t);
     var px = sx + (tx - sx) * t + Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arcScale;
     var py = sy + (ty - sy) * t + Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arcScale;

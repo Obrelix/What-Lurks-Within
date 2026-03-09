@@ -24,6 +24,8 @@ export const APP_STATE = {
   targetXY: null,
   colors: null,
   startTimes: null,
+  tweenDurations: null,
+  easingIndices: null,
 
   // Dual-canvas layout (allocated in Phase 6)
   animImageSize: null,

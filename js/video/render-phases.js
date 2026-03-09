@@ -2,7 +2,7 @@
 
 import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
-import { easeInOutCubic } from '../utils.js';
+import { easeInOutCubic, EASING_FUNCTIONS } from '../utils.js';
 import { drawWatermark } from './recorder.js';
 
 // ═══════════════════════════════════════════
@@ -50,7 +50,8 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
   var sourceXY = APP_STATE.sourceXY;
   var targetXY = APP_STATE.targetXY;
   var colors = APP_STATE.colors;
-  var tweenDur = CONFIG.TWEEN_DURATION_MS;
+  var tweenDurations = APP_STATE.tweenDurations;
+  var easingIndices = APP_STATE.easingIndices;
 
   var imageData = ctx.createImageData(canvasWidth, canvasHeight);
   var pixels = imageData.data;
@@ -71,7 +72,7 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
       px = sx; py = sy;
     } else {
       var pixelElapsed = elapsed - dep;
-      if (pixelElapsed >= tweenDur) {
+      if (pixelElapsed >= tweenDurations[i]) {
         px = tx; py = ty; settled++;
       } else {
         continue;
@@ -91,10 +92,12 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
     var dep = departures[i];
     if (elapsed < dep) continue;
     var pixelElapsed = elapsed - dep;
-    if (pixelElapsed >= tweenDur) continue;
+    var dur = tweenDurations[i];
+    if (pixelElapsed >= dur) continue;
     var sx = sourceXY[i * 2], sy = sourceXY[i * 2 + 1];
     var tx = targetXY[i * 2], ty = targetXY[i * 2 + 1];
-    var t = easeInOutCubic(pixelElapsed / tweenDur);
+    var easeFn = EASING_FUNCTIONS[easingIndices[i]];
+    var t = easeFn(pixelElapsed / dur);
     var arc = 4 * t * (1 - t);
     var px = sx + (tx - sx) * t + Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arc;
     var py = sy + (ty - sy) * t + Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arc;
