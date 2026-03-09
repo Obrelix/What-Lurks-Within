@@ -1,18 +1,14 @@
 <progress>
-  <phase>Phase 12: Download Video (MediaRecorder + captureStream)</phase>
+  <phase>Phase 13: Fix quality change not reprocessing loaded images</phase>
   <status>IN PROGRESS</status>
   <last_completed_step>IMPLEMENT</last_completed_step>
   <next_step>VERIFY END-TO-END</next_step>
-  <files_read_this_session>index.html, js/config.js, js/state.js, js/animation/engine.js, js/state-management.js, js/events.js, css/styles.css, js/validation/validations.js, CLAUDE.md, progress.txt</files_read_this_session>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/events.js, js/image/pipeline.js, js/image/matching.js, js/image/procedural.js, js/animation/engine.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Renamed "Download Result" to "Download Final Image". Added "Download Video" button (disabled by
-    default, enabled after animation completes). Created js/video/recorder.js with startRecording()
-    and stopRecording() using canvas.captureStream() + MediaRecorder (WebM/VP9). Recording starts
-    in startReveal() and stops in finishAnimation(). downloadVideo() in state-management.js creates
-    a Blob from recorded chunks and triggers download. resetState() and tryAgain() clear/reset
-    recording state. CONFIG gets VIDEO_FRAMERATE and VIDEO_MIME_TYPE. APP_STATE gets mediaRecorder
-    and recordedChunks fields. Validations added for all new CONFIG keys, APP_STATE fields, and
-    button presence/labels.
+    Added reprocessOnResolutionChange() in pipeline.js that reloads images from stored object URLs
+    and recreates sourceBuffer/targetBuffer at the new resolution when the quality dropdown changes.
+    Updated events.js quality change handler to call it. Also clears rankedTargets (stale at old
+    resolution). Added two validations: function existence and Promise return type.
   </plan_summary>
   <blockers>none</blockers>
 </progress>

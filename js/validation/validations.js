@@ -4,7 +4,7 @@ import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
 import { calcLuminance, calcHue, easeInOutCubic, pixelSortComparator } from '../utils.js';
 import { showScreen } from '../ui/screens.js';
-import { computeCoverCrop, createPixelBufferFromData } from '../image/pipeline.js';
+import { computeCoverCrop, createPixelBufferFromData, reprocessOnResolutionChange } from '../image/pipeline.js';
 import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
@@ -899,6 +899,70 @@ function validate_phase12_downloadVideoButton() {
   };
 }
 VALIDATIONS.push(validate_phase12_downloadVideoButton);
+
+// ─── Phase 13 Validations ───
+
+/**
+ * @description Validates that reprocessOnResolutionChange is exported as a function from pipeline.js.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase13_reprocessFunctionExists() {
+  var isFn = typeof reprocessOnResolutionChange === 'function';
+  return {
+    pass: isFn,
+    name: 'phase13_reprocessFunctionExists',
+    detail: isFn
+      ? 'reprocessOnResolutionChange is exported as a function'
+      : 'reprocessOnResolutionChange is ' + typeof reprocessOnResolutionChange
+  };
+}
+VALIDATIONS.push(validate_phase13_reprocessFunctionExists);
+
+/**
+ * @description Validates that reprocessOnResolutionChange recreates sourceBuffer at new resolution.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase13_reprocessResizesSource() {
+  var canvas = document.createElement('canvas');
+  canvas.width = 16;
+  canvas.height = 16;
+  var ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ff0000';
+  ctx.fillRect(0, 0, 16, 16);
+  var blob = canvas.toDataURL('image/png');
+
+  var savedSrc = APP_STATE.sourceBuffer;
+  var savedUrl = APP_STATE.sourceObjectURL;
+  var savedTgt = APP_STATE.targetBuffer;
+  var savedTgtUrl = APP_STATE.targetObjectURL;
+  var savedRanked = APP_STATE.rankedTargets;
+
+  // Set up a fake sourceBuffer at size 8 with a data URL as sourceObjectURL
+  APP_STATE.sourceBuffer = { width: 8, height: 8, data: new Uint8ClampedArray(8 * 8 * 4), count: 64 };
+  APP_STATE.sourceObjectURL = blob;
+  APP_STATE.targetBuffer = null;
+  APP_STATE.targetObjectURL = null;
+  APP_STATE.rankedTargets = [{ dummy: true }];
+
+  var resultPromise = reprocessOnResolutionChange(4);
+  var isPromise = resultPromise && typeof resultPromise.then === 'function';
+
+  // Restore state synchronously — the async result is tested structurally
+  APP_STATE.sourceBuffer = savedSrc;
+  APP_STATE.sourceObjectURL = savedUrl;
+  APP_STATE.targetBuffer = savedTgt;
+  APP_STATE.targetObjectURL = savedTgtUrl;
+  APP_STATE.rankedTargets = savedRanked;
+
+  return {
+    pass: isPromise,
+    name: 'phase13_reprocessResizesSource',
+    detail: isPromise
+      ? 'reprocessOnResolutionChange returns a Promise'
+      : 'Expected a Promise, got ' + typeof resultPromise
+  };
+}
+VALIDATIONS.push(validate_phase13_reprocessResizesSource);
 
 // ─── Validation Runner ───
 

@@ -3,7 +3,7 @@
 import { APP_STATE } from './state.js';
 import { showScreen } from './ui/screens.js';
 import { showToast } from './ui/toast.js';
-import { handleSourceUpload, handleTargetUpload, updateRevealButton } from './image/pipeline.js';
+import { handleSourceUpload, handleTargetUpload, updateRevealButton, reprocessOnResolutionChange } from './image/pipeline.js';
 import { generateRandomTarget } from './image/procedural.js';
 import { loadBestMatchingDefaultImage } from './image/matching.js';
 import { startReveal } from './animation/engine.js';
@@ -99,7 +99,9 @@ export function initEvents() {
   // Quality select
   var selectQuality = document.getElementById('select-quality');
   selectQuality?.addEventListener('change', function() {
-    APP_STATE.selectedResolution = parseInt(selectQuality.value, 10);
+    var newRes = parseInt(selectQuality.value, 10);
+    APP_STATE.selectedResolution = newRes;
+    reprocessOnResolutionChange(newRes);
   });
 
   // Pattern select

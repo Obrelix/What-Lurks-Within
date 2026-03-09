@@ -138,6 +138,49 @@ export async function handleSourceUpload(file) {
 }
 
 /**
+ * @description Loads an image from a URL string (object URL or data URL).
+ * @param {string} url - Image URL
+ * @returns {Promise<HTMLImageElement>}
+ */
+function loadImageFromURL(url) {
+  return new Promise(function(resolve, reject) {
+    var img = new Image();
+    img.onload = function() { resolve(img); };
+    img.onerror = function() { reject(new Error('Failed to load image from URL')); };
+    img.src = url;
+  });
+}
+
+/**
+ * @description Reprocesses loaded source and custom-target images at a new resolution.
+ *              Called when the quality dropdown changes after images are already loaded.
+ * @param {number} newResolution - New square dimension (256/512/768)
+ * @returns {Promise<void>}
+ */
+export async function reprocessOnResolutionChange(newResolution) {
+  APP_STATE.rankedTargets = null;
+  APP_STATE.rankedTargetIndex = 0;
+
+  if (APP_STATE.sourceObjectURL && APP_STATE.sourceBuffer) {
+    try {
+      var srcImg = await loadImageFromURL(APP_STATE.sourceObjectURL);
+      APP_STATE.sourceBuffer = createPixelBuffer(srcImg, newResolution);
+    } catch (err) {
+      showToast('Error reprocessing source image: ' + err.message, 'error');
+    }
+  }
+
+  if (APP_STATE.targetObjectURL && APP_STATE.targetBuffer) {
+    try {
+      var tgtImg = await loadImageFromURL(APP_STATE.targetObjectURL);
+      APP_STATE.targetBuffer = createPixelBuffer(tgtImg, newResolution);
+    } catch (err) {
+      showToast('Error reprocessing target image: ' + err.message, 'error');
+    }
+  }
+}
+
+/**
  * @description Handles target image upload — creates preview and PixelBuffer.
  * @param {File} file - Image file from input
  */
