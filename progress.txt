@@ -1,22 +1,16 @@
 <progress>
   <phase>Phase 14d: Rework video recording — full dual layout with smooth slide transitions</phase>
   <status>IN PROGRESS</status>
-  <last_completed_step>THINK HARD</last_completed_step>
-  <next_step>WRITE VALIDATIONS FIRST</next_step>
+  <last_completed_step>IMPLEMENT</last_completed_step>
+  <next_step>VERIFY END-TO-END</next_step>
   <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/utils.js, js/video/recorder.js, js/state-management.js, js/animation/engine.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Revert Phase 14b's target-only crop and rework 14c timing. Record the display canvas
-    directly (wide rectangle) instead of a separate square recording canvas. Add a phase
-    state machine (opening_hold → opening_slide → animating → closing_slide → closing_hold → done)
-    to engine.js. Opening: source centered 1s hold, then 500ms easeInOutCubic slide to x=0.
-    Closing: target slides from right to center (500ms), then 1s hold centered. Draw watermark
-    on the display canvas. Add VIDEO_BUFFER_SLIDE_MS=500 to CONFIG. Add animPhase,
-    animPhaseStart, sourceImageCanvas, targetImageCanvas to APP_STATE. Remove recordingCanvas.
-    Replace createRecordingCanvas/updateRecordingFrame/drawBufferFrame in recorder.js with
-    pixelBufferToCanvas. Modify drawWatermark to accept (ctx, width, height). Extract
-    buildAnimationArrays and renderBufferFrame into new animation/buffer-phases.js to keep
-    engine.js under 200 lines. Files: config.js, state.js, state-management.js, recorder.js,
-    animation/engine.js (refactor), animation/buffer-phases.js (new), validations.js.
+    Reworked video recording to use full dual layout. Record display canvas directly
+    (wide rectangle) instead of separate square recording canvas. Phase state machine
+    (opening_hold → opening_slide → animating → closing_slide → closing_hold → done)
+    with easeInOutCubic slide transitions. Watermark on display canvas. Extracted
+    buffer-phases.js module. Added VIDEO_BUFFER_SLIDE_MS=500 to CONFIG. Added animPhase,
+    animPhaseStart, sourceImageCanvas, targetImageCanvas to APP_STATE.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
