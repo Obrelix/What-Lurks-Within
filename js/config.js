@@ -68,7 +68,7 @@ export const CONFIG = {
   // Video buffers
   VIDEO_BUFFER_OPEN_MS: 600,
   VIDEO_BUFFER_CLOSE_MS: 1000,
-  VIDEO_BUFFER_SLIDE_MS: 600,
+  VIDEO_BUFFER_SLIDE_MS: 500,
 
   // Watermark
   WATERMARK_TEXT: 'What Lurks Within',
@@ -91,6 +91,9 @@ export const CONFIG = {
     'defaultImages/img12.jpg',
     'defaultImages/img13.jpg',
     'defaultImages/img14.jpg',
-    'defaultImages/img15.png'
+    'defaultImages/img15.png',
+    'defaultImages/img16.png',
+    'defaultImages/img17.png',
+    'defaultImages/img18.png'
   ]
 };
