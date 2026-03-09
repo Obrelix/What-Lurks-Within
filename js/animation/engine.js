@@ -172,6 +172,13 @@ function animationLoop(timestamp) {
   if (text) text.textContent = 'Rearranging ' + settled + ' of ' + count + ' pixels\u2026';
 
   if (settled >= count) {
+    var size = APP_STATE.animImageSize;
+    var resultImg = document.createElement('canvas');
+    resultImg.width = size;
+    resultImg.height = size;
+    var rCtx = resultImg.getContext('2d');
+    if (rCtx) rCtx.drawImage(canvas, size + APP_STATE.animGapPx, 0, size, size, 0, 0, size, size);
+    APP_STATE.targetImageCanvas = resultImg;
     APP_STATE.animPhase = 'closing_slide';
     APP_STATE.animPhaseStart = null;
   }
