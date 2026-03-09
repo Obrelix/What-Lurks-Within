@@ -1,14 +1,14 @@
 <progress>
   <phase>Phase 17b: Improve in-flight pixel visibility on source side</phase>
   <status>IN PROGRESS</status>
-  <last_completed_step>EXPLORE</last_completed_step>
-  <next_step>IMPLEMENT</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/animation/engine.js, js/video/render-phases.js</files_read_this_session>
+  <last_completed_step>IMPLEMENT</last_completed_step>
+  <next_step>VERIFY END-TO-END</next_step>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/animation/engine.js, js/video/render-phases.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    In-flight pixels are invisible near the source because they're the same color as neighbors.
-    Will bump PIXEL_FLIGHT_SIZE to 3 and add PIXEL_FLIGHT_BOOST (brightness boost of 60) so
-    in-flight pixels are visually distinct. Changes in config.js, engine.js, render-phases.js,
-    and validations.js.
+    Fixed draw order bug: in-flight pixels were overwritten by stationary source pixels drawn
+    later in the same loop. Split single-pass rendering into two passes in both engine.js and
+    render-phases.js: pass 1 draws stationary pixels, pass 2 draws in-flight pixels on top.
+    Added validate_phase17_drawOrder validation that checks for two-pass structure.
   </plan_summary>
   <blockers>none</blockers>
 </progress>

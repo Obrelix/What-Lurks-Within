@@ -126,7 +126,9 @@ function animationLoop(timestamp) {
   var tweenDur = CONFIG.TWEEN_DURATION_MS;
   var elapsed = timestamp - APP_STATE.animationStartTime;
   var idealIndex = Math.min(count, Math.floor(elapsed * APP_STATE.pixelsPerMs));
-  var targetIndex = Math.min(idealIndex, APP_STATE.animSettled + CONFIG.MAX_INFLIGHT);
+  var defRes = CONFIG.DEFAULT_RESOLUTION;
+  var maxInFlight = Math.round(CONFIG.MAX_INFLIGHT * count / (defRes * defRes));
+  var targetIndex = Math.min(idealIndex, APP_STATE.animSettled + maxInFlight);
 
   while (APP_STATE.animBatchIndex < targetIndex) {
     startTimes[APP_STATE.animBatchIndex] = APP_STATE.animationStartTime +
@@ -137,16 +139,17 @@ function animationLoop(timestamp) {
   var imageData = ctx.createImageData(canvasWidth, canvasHeight);
   var pixels = imageData.data;
   var settled = 0;
-  var flightSize = CONFIG.PIXEL_FLIGHT_SIZE;
+  var flightSize = Math.max(CONFIG.PIXEL_FLIGHT_SIZE,
+    Math.round(CONFIG.PIXEL_FLIGHT_SIZE * canvasHeight / CONFIG.DEFAULT_RESOLUTION));
   var halfFlight = Math.floor(flightSize / 2);
   var boost = CONFIG.PIXEL_FLIGHT_BOOST;
 
+  // Pass 1: draw stationary pixels (waiting at source or settled at target)
   for (var i = 0; i < count; i++) {
     var st = startTimes[i];
     var sx = sourceXY[i * 2], sy = sourceXY[i * 2 + 1];
     var tx = targetXY[i * 2], ty = targetXY[i * 2 + 1];
     var px, py;
-    var inFlight = false;
     if (st === 0) {
       px = sx; py = sy;
     } else {
@@ -154,32 +157,41 @@ function animationLoop(timestamp) {
       if (pixelElapsed >= tweenDur) {
         px = tx; py = ty; settled++;
       } else {
-        var t = easeInOutCubic(pixelElapsed / tweenDur);
-        var arcScale = 4 * t * (1 - t);
-        px = sx + (tx - sx) * t + Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arcScale;
-        py = sy + (ty - sy) * t + Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arcScale;
-        inFlight = true;
+        continue;
       }
     }
     var ix = Math.round(px), iy = Math.round(py);
+    if (ix < 0) ix = 0; if (ix >= canvasWidth) ix = canvasWidth - 1;
+    if (iy < 0) iy = 0; if (iy >= canvasHeight) iy = canvasHeight - 1;
     var cr = colors[i * 4], cg = colors[i * 4 + 1], cb = colors[i * 4 + 2], ca = colors[i * 4 + 3];
-    if (inFlight) {
-      var br = Math.min(255, cr + boost), bg = Math.min(255, cg + boost), bb = Math.min(255, cb + boost);
-      for (var dy = -halfFlight; dy < flightSize - halfFlight; dy++) {
-        var wy = iy + dy;
-        if (wy < 0 || wy >= canvasHeight) continue;
-        for (var dx = -halfFlight; dx < flightSize - halfFlight; dx++) {
-          var wx = ix + dx;
-          if (wx < 0 || wx >= canvasWidth) continue;
-          var off = (wy * canvasWidth + wx) * 4;
-          pixels[off] = br; pixels[off + 1] = bg; pixels[off + 2] = bb; pixels[off + 3] = ca;
-        }
+    var off = (iy * canvasWidth + ix) * 4;
+    pixels[off] = cr; pixels[off + 1] = cg; pixels[off + 2] = cb; pixels[off + 3] = ca;
+  }
+
+  // Pass 2: draw in-flight pixels on top so they are always visible
+  for (var i = 0; i < count; i++) {
+    var st = startTimes[i];
+    if (st === 0) continue;
+    var pixelElapsed = timestamp - st;
+    if (pixelElapsed >= tweenDur) continue;
+    var sx = sourceXY[i * 2], sy = sourceXY[i * 2 + 1];
+    var tx = targetXY[i * 2], ty = targetXY[i * 2 + 1];
+    var t = easeInOutCubic(pixelElapsed / tweenDur);
+    var arcScale = 4 * t * (1 - t);
+    var px = sx + (tx - sx) * t + Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arcScale;
+    var py = sy + (ty - sy) * t + Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arcScale;
+    var ix = Math.round(px), iy = Math.round(py);
+    var cr = colors[i * 4], cg = colors[i * 4 + 1], cb = colors[i * 4 + 2], ca = colors[i * 4 + 3];
+    var br = Math.min(255, cr + boost), bg = Math.min(255, cg + boost), bb = Math.min(255, cb + boost);
+    for (var dy = -halfFlight; dy < flightSize - halfFlight; dy++) {
+      var wy = iy + dy;
+      if (wy < 0 || wy >= canvasHeight) continue;
+      for (var dx = -halfFlight; dx < flightSize - halfFlight; dx++) {
+        var wx = ix + dx;
+        if (wx < 0 || wx >= canvasWidth) continue;
+        var off = (wy * canvasWidth + wx) * 4;
+        pixels[off] = br; pixels[off + 1] = bg; pixels[off + 2] = bb; pixels[off + 3] = ca;
       }
-    } else {
-      if (ix < 0) ix = 0; if (ix >= canvasWidth) ix = canvasWidth - 1;
-      if (iy < 0) iy = 0; if (iy >= canvasHeight) iy = canvasHeight - 1;
-      var off = (iy * canvasWidth + ix) * 4;
-      pixels[off] = cr; pixels[off + 1] = cg; pixels[off + 2] = cb; pixels[off + 3] = ca;
     }
   }
 

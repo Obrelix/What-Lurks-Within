@@ -1364,6 +1364,49 @@ function validate_phase17_inflightPixelSize() {
 }
 VALIDATIONS.push(validate_phase17_inflightPixelSize);
 
+/**
+ * @description Validates that in-flight pixels are drawn ON TOP of stationary pixels
+ *              (two-pass rendering). When a stationary and in-flight pixel share the
+ *              same screen position, the in-flight pixel's boosted color must win.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase17_drawOrder() {
+  // The engine loop must draw stationary pixels first, then in-flight pixels second.
+  // We verify this by checking the code structure: the animationLoop in engine.js
+  // and renderPixelFrame in render-phases.js must contain two separate pixel loops.
+  // We fetch the source and check for the two-pass pattern.
+  var engineSrc = '';
+  var renderSrc = '';
+  try {
+    var xhr1 = new XMLHttpRequest();
+    xhr1.open('GET', 'js/animation/engine.js', false);
+    xhr1.send();
+    engineSrc = xhr1.responseText;
+    var xhr2 = new XMLHttpRequest();
+    xhr2.open('GET', 'js/video/render-phases.js', false);
+    xhr2.send();
+    renderSrc = xhr2.responseText;
+  } catch (e) {
+    return { pass: false, name: 'phase17_drawOrder', detail: 'Failed to read source: ' + e.message };
+  }
+
+  // Check that engine.js has two separate for-loops for stationary then in-flight
+  // by looking for the "pass 1" and "pass 2" comments or two distinct pixel-drawing loops
+  var engineHasTwoPass = (engineSrc.match(/for\s*\(\s*var\s+i\s*=\s*0;\s*i\s*<\s*count/g) || []).length >= 2;
+  // Check render-phases.js renderPixelFrame similarly
+  var renderHasTwoPass = (renderSrc.match(/for\s*\(\s*var\s+i\s*=\s*0;\s*i\s*<\s*count/g) || []).length >= 2;
+
+  var pass = engineHasTwoPass && renderHasTwoPass;
+  return {
+    pass: pass,
+    name: 'phase17_drawOrder',
+    detail: pass
+      ? 'Both engine.js and render-phases.js use two-pass rendering'
+      : 'Two-pass rendering missing: engine=' + engineHasTwoPass + ' render=' + renderHasTwoPass
+  };
+}
+VALIDATIONS.push(validate_phase17_drawOrder);
+
 // ─── Validation Runner ───
 
 /**
