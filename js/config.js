@@ -62,9 +62,9 @@ export const CONFIG = {
   ],
 
   // Video buffers
-  VIDEO_BUFFER_OPEN_MS: 1500,
-  VIDEO_BUFFER_CLOSE_MS: 1500,
-  VIDEO_BUFFER_SLIDE_MS: 500,
+  VIDEO_BUFFER_OPEN_MS: 600,
+  VIDEO_BUFFER_CLOSE_MS: 1000,
+  VIDEO_BUFFER_SLIDE_MS: 600,
 
   // Watermark
   WATERMARK_TEXT: 'What Lurks Within',
