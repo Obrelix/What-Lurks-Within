@@ -7,7 +7,7 @@ import { showScreen } from '../ui/screens.js';
 import { showToast } from '../ui/toast.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
-import { startRecording, stopRecording, createRecordingCanvas, updateRecordingFrame } from '../video/recorder.js';
+import { startRecording, stopRecording, createRecordingCanvas, updateRecordingFrame, drawBufferFrame } from '../video/recorder.js';
 
 // ═══════════════════════════════════════════
 // ANIMATION ENGINE
@@ -111,6 +111,7 @@ export function startReveal() {
       if (overlay) overlay.classList.remove('active');
       showScreen('animation');
       startRecording(recCanvas);
+      drawBufferFrame(recCanvas, srcBuf);
       APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
     } catch (err) {
       if (overlay) overlay.classList.remove('active');
@@ -145,12 +146,15 @@ function animationLoop(timestamp) {
   var tweenDur = CONFIG.TWEEN_DURATION_MS;
 
   var elapsed = timestamp - APP_STATE.animationStartTime;
-  var idealIndex = Math.min(count, Math.floor(elapsed * APP_STATE.pixelsPerMs));
+  var animElapsed = elapsed - CONFIG.VIDEO_BUFFER_OPEN_MS;
+  if (animElapsed < 0) animElapsed = 0;
+  var idealIndex = Math.min(count, Math.floor(animElapsed * APP_STATE.pixelsPerMs));
   var maxByInflight = APP_STATE.animSettled + CONFIG.MAX_INFLIGHT;
   var targetIndex = Math.min(idealIndex, maxByInflight);
 
+  var animStartTime = APP_STATE.animationStartTime + CONFIG.VIDEO_BUFFER_OPEN_MS;
   while (APP_STATE.animBatchIndex < targetIndex) {
-    startTimes[APP_STATE.animBatchIndex] = APP_STATE.animationStartTime +
+    startTimes[APP_STATE.animBatchIndex] = animStartTime +
       (APP_STATE.animBatchIndex / APP_STATE.pixelsPerMs);
     APP_STATE.animBatchIndex++;
   }
@@ -202,7 +206,7 @@ function animationLoop(timestamp) {
 
   ctx.putImageData(imageData, 0, 0);
 
-  if (APP_STATE.recordingCanvas) {
+  if (APP_STATE.recordingCanvas && animElapsed > 0) {
     updateRecordingFrame(canvas, APP_STATE.recordingCanvas, APP_STATE.animImageSize, APP_STATE.animGapPx);
   }
 
@@ -214,9 +218,12 @@ function animationLoop(timestamp) {
   if (text) text.textContent = 'Rearranging ' + settled + ' of ' + count + ' pixels\u2026';
 
   if (settled >= count) {
+    if (APP_STATE.recordingCanvas && APP_STATE.targetBuffer) {
+      drawBufferFrame(APP_STATE.recordingCanvas, APP_STATE.targetBuffer);
+    }
     setTimeout(function() {
       finishAnimation();
-    }, CONFIG.COMPLETION_DELAY_MS);
+    }, CONFIG.VIDEO_BUFFER_CLOSE_MS);
     return;
   }
 

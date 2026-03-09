@@ -9,7 +9,7 @@ import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
 } from '../image/matching.js';
-import { resolveVideoMimeType, createRecordingCanvas, drawWatermark } from '../video/recorder.js';
+import { resolveVideoMimeType, createRecordingCanvas, drawWatermark, drawBufferFrame } from '../video/recorder.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
 import { buildAnimationArrays } from '../animation/engine.js';
@@ -1102,6 +1102,51 @@ function validate_phase14b_drawWatermark() {
   };
 }
 VALIDATIONS.push(validate_phase14b_drawWatermark);
+
+// ─── Phase 14c Validations ───
+
+/**
+ * @description Validates CONFIG has VIDEO_BUFFER_OPEN_MS and VIDEO_BUFFER_CLOSE_MS.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14c_bufferConfig() {
+  var hasOpen = typeof CONFIG.VIDEO_BUFFER_OPEN_MS === 'number' && CONFIG.VIDEO_BUFFER_OPEN_MS > 0;
+  var hasClose = typeof CONFIG.VIDEO_BUFFER_CLOSE_MS === 'number' && CONFIG.VIDEO_BUFFER_CLOSE_MS > 0;
+  var pass = hasOpen && hasClose;
+  return {
+    pass: pass,
+    name: 'phase14c_bufferConfig',
+    detail: pass
+      ? 'VIDEO_BUFFER_OPEN_MS=' + CONFIG.VIDEO_BUFFER_OPEN_MS + ' VIDEO_BUFFER_CLOSE_MS=' + CONFIG.VIDEO_BUFFER_CLOSE_MS
+      : 'hasOpen=' + hasOpen + ' hasClose=' + hasClose
+  };
+}
+VALIDATIONS.push(validate_phase14c_bufferConfig);
+
+/**
+ * @description Validates drawBufferFrame is exported and draws a PixelBuffer on a canvas.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase14c_drawBufferFrame() {
+  var isFn = typeof drawBufferFrame === 'function';
+  if (!isFn) return { pass: false, name: 'phase14c_drawBufferFrame', detail: 'not a function' };
+  var c = document.createElement('canvas');
+  c.width = 4; c.height = 4;
+  var data = new Uint8ClampedArray(4 * 4 * 4);
+  for (var i = 0; i < data.length; i += 4) { data[i] = 255; data[i + 3] = 255; }
+  var buf = { width: 4, height: 4, data: data, count: 16 };
+  drawBufferFrame(c, buf);
+  var px = c.getContext('2d').getImageData(0, 0, 1, 1).data;
+  var pass = px[0] === 255 && px[3] === 255;
+  return {
+    pass: pass,
+    name: 'phase14c_drawBufferFrame',
+    detail: pass
+      ? 'drawBufferFrame rendered PixelBuffer correctly'
+      : 'Pixel[0,0] r=' + px[0] + ' a=' + px[3]
+  };
+}
+VALIDATIONS.push(validate_phase14c_drawBufferFrame);
 
 // ─── Validation Runner ───
 

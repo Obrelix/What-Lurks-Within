@@ -61,6 +61,10 @@ export const CONFIG = {
     'video/webm'
   ],
 
+  // Video buffers
+  VIDEO_BUFFER_OPEN_MS: 1500,
+  VIDEO_BUFFER_CLOSE_MS: 1500,
+
   // Watermark
   WATERMARK_TEXT: 'What Lurks Within',
   WATERMARK_FONT_SIZE_RATIO: 0.03,

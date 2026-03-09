@@ -79,6 +79,22 @@ export function updateRecordingFrame(displayCanvas, recordingCanvas, size, gapPx
   drawWatermark(ctx, size);
 }
 
+/**
+ * @description Draws a PixelBuffer as a full-frame image on the recording canvas with watermark.
+ *              Used for opening buffer (source image) and closing buffer (target image).
+ * @param {HTMLCanvasElement} recordingCanvas - The square recording canvas
+ * @param {{ width: number, height: number, data: Uint8ClampedArray }} pixelBuffer - Image data
+ */
+export function drawBufferFrame(recordingCanvas, pixelBuffer) {
+  var ctx = recordingCanvas.getContext('2d');
+  if (!ctx) return;
+  var size = recordingCanvas.width;
+  var imageData = ctx.createImageData(size, size);
+  imageData.data.set(pixelBuffer.data);
+  ctx.putImageData(imageData, 0, 0);
+  drawWatermark(ctx, size);
+}
+
 // ═══════════════════════════════════════════
 // START / STOP RECORDING
 // ═══════════════════════════════════════════

@@ -1,15 +1,17 @@
 <progress>
-  <phase>Phase 14b: Recording canvas — target crop + watermark</phase>
+  <phase>Phase 14c: Opening + closing buffers for video recording</phase>
   <status>IN PROGRESS</status>
   <last_completed_step>EXPLORE</last_completed_step>
   <next_step>WRITE VALIDATIONS FIRST</next_step>
   <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/video/recorder.js, js/state-management.js, js/animation/engine.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Create a hidden off-screen recording canvas (size×size) in startReveal(). Record that canvas
-    instead of the display canvas. Each frame in animationLoop(), copy just the target region from
-    the display canvas to the recording canvas, then draw a watermark. Add CONFIG keys for watermark
-    (text, font size ratio, opacity, padding ratio). Add APP_STATE.recordingCanvas field.
-    Files: config.js, state.js, engine.js, state-management.js, validations.js.
+    Add CONFIG.VIDEO_BUFFER_OPEN_MS (1500) and VIDEO_BUFFER_CLOSE_MS (1500). Opening buffer:
+    after recording starts, draw source image centered on recording canvas, delay pixel departures
+    by shifting elapsed time in the animation loop. Closing buffer: when all pixels settle, draw
+    target image centered on recording canvas, wait before calling finishAnimation().
+    Add drawBufferFrame() to recorder.js for rendering a PixelBuffer centered with watermark.
+    Modify engine.js startReveal() and animationLoop() timing. Files: config.js, recorder.js,
+    engine.js, validations.js.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
