@@ -7,7 +7,7 @@ import { showScreen } from '../ui/screens.js';
 import { showToast } from '../ui/toast.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
-import { startRecording, pixelBufferToCanvas, drawWatermark } from '../video/recorder.js';
+import { pixelBufferToCanvas, drawWatermark } from '../video/recorder.js';
 import { buildAnimationArrays, renderBufferFrame, finishAnimation } from './buffer-phases.js';
 
 // Re-export for external consumers
@@ -83,9 +83,7 @@ export function startReveal() {
 
       if (overlay) overlay.classList.remove('active');
       showScreen('animation');
-      startRecording(canvas).then(function() {
-        APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
-      });
+      APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
     } catch (err) {
       if (overlay) overlay.classList.remove('active');
       showToast('Error building mapping: ' + err.message, 'error');

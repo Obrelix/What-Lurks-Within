@@ -34,9 +34,8 @@ export const APP_STATE = {
   rankedTargets: null,
   rankedTargetIndex: 0,
 
-  // Video recording (Phase 12/14)
-  mediaRecorder: null,
-  recordedChunks: [],
+  // Video recording (Phase 16 — offline render)
+  recordedVideoBlob: null,
   resolvedVideoMime: null,
 
   // Buffer phase state machine (Phase 14d)

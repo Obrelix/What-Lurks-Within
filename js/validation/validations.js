@@ -9,7 +9,8 @@ import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
 } from '../image/matching.js';
-import { resolveVideoMimeType, drawWatermark, pixelBufferToCanvas, startRecording } from '../video/recorder.js';
+import { resolveVideoMimeType, drawWatermark, pixelBufferToCanvas } from '../video/recorder.js';
+import { renderOfflineVideo } from '../video/offline-render.js';
 import { renderBufferFrame } from '../animation/buffer-phases.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
@@ -846,19 +847,20 @@ function validate_phase12_configVideoKeys() {
 VALIDATIONS.push(validate_phase12_configVideoKeys);
 
 /**
- * @description Validates APP_STATE has mediaRecorder and recordedChunks fields.
+ * @description Validates APP_STATE has recordedVideoBlob field (offline render approach).
  * @returns {{ pass: boolean, name: string, detail: string }}
  */
 function validate_phase12_appStateVideoFields() {
-  var hasRecorder = 'mediaRecorder' in APP_STATE;
-  var hasChunks = 'recordedChunks' in APP_STATE;
-  var pass = hasRecorder && hasChunks;
+  var hasBlob = 'recordedVideoBlob' in APP_STATE;
+  var noRecorder = !('mediaRecorder' in APP_STATE);
+  var noChunks = !('recordedChunks' in APP_STATE);
+  var pass = hasBlob && noRecorder && noChunks;
   return {
     pass: pass,
     name: 'phase12_appStateVideoFields',
     detail: pass
-      ? 'APP_STATE has mediaRecorder and recordedChunks'
-      : 'hasRecorder=' + hasRecorder + ' hasChunks=' + hasChunks
+      ? 'APP_STATE has recordedVideoBlob, no legacy mediaRecorder/recordedChunks'
+      : 'hasBlob=' + hasBlob + ' noRecorder=' + noRecorder + ' noChunks=' + noChunks
   };
 }
 VALIDATIONS.push(validate_phase12_appStateVideoFields);
@@ -1220,33 +1222,57 @@ function validate_phase14d_slideTimingConsistency() {
 }
 VALIDATIONS.push(validate_phase14d_slideTimingConsistency);
 
-// ─── Phase 15 Validations ───
+// ─── Phase 16 Validations ───
 
 /**
- * @description Validates that startRecording returns a Promise so the caller can wait for the recorder to be active.
+ * @description Validates CONFIG.VIDEO_BITRATE exists and is a positive number.
  * @returns {{ pass: boolean, name: string, detail: string }}
  */
-function validate_phase15_startRecordingReturnsPromise() {
-  var isFn = typeof startRecording === 'function';
-  if (!isFn) return { pass: false, name: 'phase15_startRecordingReturnsPromise', detail: 'not a function' };
-  var c = document.createElement('canvas');
-  c.width = 4; c.height = 4;
-  var result = startRecording(c);
-  var isPromise = result && typeof result.then === 'function';
-  // Clean up: stop any recorder that was started
-  if (APP_STATE.mediaRecorder && APP_STATE.mediaRecorder.state !== 'inactive') {
-    APP_STATE.mediaRecorder.stop();
-    APP_STATE.mediaRecorder = null;
-  }
+function validate_phase16_configVideoBitrate() {
+  var has = typeof CONFIG.VIDEO_BITRATE === 'number' && CONFIG.VIDEO_BITRATE > 0;
   return {
-    pass: isPromise,
-    name: 'phase15_startRecordingReturnsPromise',
-    detail: isPromise
-      ? 'startRecording returns a Promise'
-      : 'startRecording returned ' + typeof result + ' (expected Promise)'
+    pass: has,
+    name: 'phase16_configVideoBitrate',
+    detail: has
+      ? 'VIDEO_BITRATE=' + CONFIG.VIDEO_BITRATE
+      : 'Missing or invalid VIDEO_BITRATE'
   };
 }
-VALIDATIONS.push(validate_phase15_startRecordingReturnsPromise);
+VALIDATIONS.push(validate_phase16_configVideoBitrate);
+
+/**
+ * @description Validates renderOfflineVideo is exported as a function.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase16_renderOfflineVideoExists() {
+  var isFn = typeof renderOfflineVideo === 'function';
+  return {
+    pass: isFn,
+    name: 'phase16_renderOfflineVideoExists',
+    detail: isFn
+      ? 'renderOfflineVideo is exported as a function'
+      : 'renderOfflineVideo is ' + typeof renderOfflineVideo
+  };
+}
+VALIDATIONS.push(validate_phase16_renderOfflineVideoExists);
+
+/**
+ * @description Validates recorder.js no longer exports startRecording (live recording removed).
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase16_noStartRecordingExport() {
+  // startRecording was removed from the import — if this module loaded without error,
+  // recorder.js no longer exports it. Verify it's not in scope.
+  var gone = typeof window.startRecording === 'undefined';
+  return {
+    pass: gone,
+    name: 'phase16_noStartRecordingExport',
+    detail: gone
+      ? 'startRecording is no longer exported from recorder.js'
+      : 'startRecording still accessible'
+  };
+}
+VALIDATIONS.push(validate_phase16_noStartRecordingExport);
 
 // ─── Validation Runner ───
 

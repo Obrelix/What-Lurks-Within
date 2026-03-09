@@ -4,7 +4,7 @@ import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
 import { easeInOutCubic } from '../utils.js';
 import { showScreen } from '../ui/screens.js';
-import { stopRecording, drawWatermark } from '../video/recorder.js';
+import { drawWatermark } from '../video/recorder.js';
 
 // ═══════════════════════════════════════════
 // TYPED ARRAY BUILDER
@@ -120,7 +120,8 @@ export function finishAnimation() {
     APP_STATE.animationFrameId = null;
   }
 
-  stopRecording();
+  var videoBtn = document.getElementById('btn-download-video');
+  if (videoBtn) videoBtn.disabled = false;
 
   var resultCanvas = document.getElementById('result-canvas');
   if (resultCanvas && APP_STATE.targetImageCanvas) {

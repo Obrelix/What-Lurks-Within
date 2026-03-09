@@ -1,14 +1,17 @@
 <progress>
-  <phase>Phase 15: Fix recording to capture from the very start</phase>
+  <phase>Phase 16: Offline video re-rendering for high-quality downloads</phase>
   <status>IN PROGRESS</status>
   <last_completed_step>IMPLEMENT</last_completed_step>
   <next_step>VERIFY END-TO-END</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/video/recorder.js, js/animation/engine.js, js/animation/buffer-phases.js, js/validation/validations.js</files_read_this_session>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/video/recorder.js, js/animation/engine.js, js/animation/buffer-phases.js, js/state-management.js, js/events.js, js/validation/validations.js, js/utils.js</files_read_this_session>
   <plan_summary>
-    Made startRecording() return a Promise that resolves on the MediaRecorder onstart event.
-    In engine.js, the animation loop now starts inside .then() so no frames are drawn
-    until the recorder is actively capturing. Added validation confirming startRecording
-    returns a Promise.
+    Removed live MediaRecorder capture from engine.js and buffer-phases.js. Added CONFIG.VIDEO_BITRATE
+    (12 Mbps). Created js/video/render-phases.js (phase renderers) and js/video/offline-render.js
+    (main offline render orchestrator using captureStream(0) + requestFrame() with setTimeout pacing).
+    downloadVideo() in state-management.js now triggers offline render on click with progress feedback
+    on the button text. State fields mediaRecorder/recordedChunks replaced by recordedVideoBlob.
+    Validations updated: Phase 12 checks for new state shape, Phase 15 replaced with Phase 16
+    validations for CONFIG.VIDEO_BITRATE, renderOfflineVideo export, and startRecording removal.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
