@@ -49,7 +49,10 @@ export function resetState() {
   APP_STATE.mediaRecorder = null;
   APP_STATE.recordedChunks = [];
   APP_STATE.resolvedVideoMime = null;
-  APP_STATE.recordingCanvas = null;
+  APP_STATE.animPhase = null;
+  APP_STATE.animPhaseStart = null;
+  APP_STATE.sourceImageCanvas = null;
+  APP_STATE.targetImageCanvas = null;
   var videoBtn = document.getElementById('btn-download-video');
   if (videoBtn) videoBtn.disabled = true;
 

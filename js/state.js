@@ -38,5 +38,10 @@ export const APP_STATE = {
   mediaRecorder: null,
   recordedChunks: [],
   resolvedVideoMime: null,
-  recordingCanvas: null
+
+  // Buffer phase state machine (Phase 14d)
+  animPhase: null,
+  animPhaseStart: null,
+  sourceImageCanvas: null,
+  targetImageCanvas: null
 };

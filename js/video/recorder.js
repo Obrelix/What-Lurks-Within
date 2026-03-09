@@ -31,68 +31,42 @@ export function resolveVideoMimeType() {
 }
 
 // ═══════════════════════════════════════════
-// RECORDING CANVAS + WATERMARK
+// WATERMARK + PIXEL BUFFER HELPERS
 // ═══════════════════════════════════════════
-
-/**
- * @description Creates a hidden off-screen canvas for recording the target side only.
- * @param {number} size - Square dimension (matches image resolution)
- * @returns {HTMLCanvasElement}
- */
-export function createRecordingCanvas(size) {
-  var canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  return canvas;
-}
 
 /**
  * @description Draws the watermark text onto a canvas context (bottom-right corner).
  * @param {CanvasRenderingContext2D} ctx - Target context
- * @param {number} size - Square dimension of the canvas
+ * @param {number} canvasWidth - Width of the canvas
+ * @param {number} canvasHeight - Height of the canvas
  */
-export function drawWatermark(ctx, size) {
-  var fontSize = Math.max(10, Math.round(size * CONFIG.WATERMARK_FONT_SIZE_RATIO));
-  var padding = Math.max(4, Math.round(size * CONFIG.WATERMARK_PADDING_RATIO));
+export function drawWatermark(ctx, canvasWidth, canvasHeight) {
+  var fontSize = Math.max(10, Math.round(canvasHeight * CONFIG.WATERMARK_FONT_SIZE_RATIO));
+  var padding = Math.max(4, Math.round(canvasHeight * CONFIG.WATERMARK_PADDING_RATIO));
   ctx.save();
   ctx.font = fontSize + 'px "Share Tech Mono", monospace';
   ctx.globalAlpha = CONFIG.WATERMARK_OPACITY;
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'bottom';
-  ctx.fillText(CONFIG.WATERMARK_TEXT, size - padding, size - padding);
+  ctx.fillText(CONFIG.WATERMARK_TEXT, canvasWidth - padding, canvasHeight - padding);
   ctx.restore();
 }
 
 /**
- * @description Copies the target region from the display canvas to the recording canvas,
- *              then draws the watermark overlay.
- * @param {HTMLCanvasElement} displayCanvas - The dual-layout animation canvas
- * @param {HTMLCanvasElement} recordingCanvas - The square recording canvas
- * @param {number} size - Image square dimension
- * @param {number} gapPx - Gap width between source and target on the display canvas
- */
-export function updateRecordingFrame(displayCanvas, recordingCanvas, size, gapPx) {
-  var ctx = recordingCanvas.getContext('2d');
-  if (!ctx) return;
-  ctx.drawImage(displayCanvas, size + gapPx, 0, size, size, 0, 0, size, size);
-  drawWatermark(ctx, size);
-}
-
-/**
- * @description Draws a PixelBuffer as a full-frame image on the recording canvas with watermark.
- *              Used for opening buffer (source image) and closing buffer (target image).
- * @param {HTMLCanvasElement} recordingCanvas - The square recording canvas
+ * @description Converts a PixelBuffer to an HTMLCanvasElement for efficient drawImage.
  * @param {{ width: number, height: number, data: Uint8ClampedArray }} pixelBuffer - Image data
+ * @returns {HTMLCanvasElement}
  */
-export function drawBufferFrame(recordingCanvas, pixelBuffer) {
-  var ctx = recordingCanvas.getContext('2d');
-  if (!ctx) return;
-  var size = recordingCanvas.width;
-  var imageData = ctx.createImageData(size, size);
+export function pixelBufferToCanvas(pixelBuffer) {
+  var canvas = document.createElement('canvas');
+  canvas.width = pixelBuffer.width;
+  canvas.height = pixelBuffer.height;
+  var ctx = canvas.getContext('2d');
+  var imageData = ctx.createImageData(pixelBuffer.width, pixelBuffer.height);
   imageData.data.set(pixelBuffer.data);
   ctx.putImageData(imageData, 0, 0);
-  drawWatermark(ctx, size);
+  return canvas;
 }
 
 // ═══════════════════════════════════════════
