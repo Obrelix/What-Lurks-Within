@@ -75,12 +75,15 @@ export function pixelBufferToCanvas(pixelBuffer) {
 
 /**
  * @description Starts recording the given canvas element.
+ *              Returns a Promise that resolves once the recorder is actively capturing,
+ *              so the caller can wait before drawing the first frame.
  * @param {HTMLCanvasElement} canvas - The canvas to record
+ * @returns {Promise<void>} Resolves when MediaRecorder is actively recording
  */
 export function startRecording(canvas) {
   if (!isRecordingSupported()) {
     showToast('Video recording not supported in this browser.', 'error');
-    return;
+    return Promise.resolve();
   }
 
   var mimeType = resolveVideoMimeType();
@@ -96,8 +99,11 @@ export function startRecording(canvas) {
     }
   };
 
-  recorder.start();
-  APP_STATE.mediaRecorder = recorder;
+  return new Promise(function(resolve) {
+    recorder.onstart = function() { resolve(); };
+    recorder.start();
+    APP_STATE.mediaRecorder = recorder;
+  });
 }
 
 /**

@@ -1,16 +1,14 @@
 <progress>
-  <phase>Phase 14d: Rework video recording — full dual layout with smooth slide transitions</phase>
+  <phase>Phase 15: Fix recording to capture from the very start</phase>
   <status>IN PROGRESS</status>
   <last_completed_step>IMPLEMENT</last_completed_step>
   <next_step>VERIFY END-TO-END</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/utils.js, js/video/recorder.js, js/state-management.js, js/animation/engine.js, js/validation/validations.js</files_read_this_session>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/video/recorder.js, js/animation/engine.js, js/animation/buffer-phases.js, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Reworked video recording to use full dual layout. Record display canvas directly
-    (wide rectangle) instead of separate square recording canvas. Phase state machine
-    (opening_hold → opening_slide → animating → closing_slide → closing_hold → done)
-    with easeInOutCubic slide transitions. Watermark on display canvas. Extracted
-    buffer-phases.js module. Added VIDEO_BUFFER_SLIDE_MS=500 to CONFIG. Added animPhase,
-    animPhaseStart, sourceImageCanvas, targetImageCanvas to APP_STATE.
+    Made startRecording() return a Promise that resolves on the MediaRecorder onstart event.
+    In engine.js, the animation loop now starts inside .then() so no frames are drawn
+    until the recorder is actively capturing. Added validation confirming startRecording
+    returns a Promise.
   </plan_summary>
   <blockers>none</blockers>
 </progress>

@@ -9,7 +9,7 @@ import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
 } from '../image/matching.js';
-import { resolveVideoMimeType, drawWatermark, pixelBufferToCanvas } from '../video/recorder.js';
+import { resolveVideoMimeType, drawWatermark, pixelBufferToCanvas, startRecording } from '../video/recorder.js';
 import { renderBufferFrame } from '../animation/buffer-phases.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
@@ -1219,6 +1219,34 @@ function validate_phase14d_slideTimingConsistency() {
   };
 }
 VALIDATIONS.push(validate_phase14d_slideTimingConsistency);
+
+// ─── Phase 15 Validations ───
+
+/**
+ * @description Validates that startRecording returns a Promise so the caller can wait for the recorder to be active.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase15_startRecordingReturnsPromise() {
+  var isFn = typeof startRecording === 'function';
+  if (!isFn) return { pass: false, name: 'phase15_startRecordingReturnsPromise', detail: 'not a function' };
+  var c = document.createElement('canvas');
+  c.width = 4; c.height = 4;
+  var result = startRecording(c);
+  var isPromise = result && typeof result.then === 'function';
+  // Clean up: stop any recorder that was started
+  if (APP_STATE.mediaRecorder && APP_STATE.mediaRecorder.state !== 'inactive') {
+    APP_STATE.mediaRecorder.stop();
+    APP_STATE.mediaRecorder = null;
+  }
+  return {
+    pass: isPromise,
+    name: 'phase15_startRecordingReturnsPromise',
+    detail: isPromise
+      ? 'startRecording returns a Promise'
+      : 'startRecording returned ' + typeof result + ' (expected Promise)'
+  };
+}
+VALIDATIONS.push(validate_phase15_startRecordingReturnsPromise);
 
 // ─── Validation Runner ───
 

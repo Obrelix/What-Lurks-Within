@@ -75,10 +75,17 @@ export function startReveal() {
       APP_STATE.animPhase = 'opening_hold';
       APP_STATE.animPhaseStart = null;
 
+      // Draw initial frame before recording so the stream has content
+      var initCtx = canvas.getContext('2d');
+      var centerX = (canvasWidth - size) / 2;
+      initCtx.clearRect(0, 0, canvasWidth, size);
+      initCtx.drawImage(APP_STATE.sourceImageCanvas, centerX, 0);
+
       if (overlay) overlay.classList.remove('active');
       showScreen('animation');
-      startRecording(canvas);
-      APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
+      startRecording(canvas).then(function() {
+        APP_STATE.animationFrameId = requestAnimationFrame(animationLoop);
+      });
     } catch (err) {
       if (overlay) overlay.classList.remove('active');
       showToast('Error building mapping: ' + err.message, 'error');
