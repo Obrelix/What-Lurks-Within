@@ -1,13 +1,14 @@
 <progress>
-  <phase>Phase 17: Improve in-flight pixel visibility</phase>
+  <phase>Phase 17b: Improve in-flight pixel visibility on source side</phase>
   <status>IN PROGRESS</status>
-  <last_completed_step>IMPLEMENT</last_completed_step>
-  <next_step>VERIFY END-TO-END</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/utils.js, js/animation/engine.js, js/animation/buffer-phases.js, js/video/offline-render.js, js/video/render-phases.js, js/validation/validations.js</files_read_this_session>
+  <last_completed_step>EXPLORE</last_completed_step>
+  <next_step>IMPLEMENT</next_step>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/animation/engine.js, js/video/render-phases.js</files_read_this_session>
   <plan_summary>
-    Added CONFIG.PIXEL_FLIGHT_SIZE (default 2). Modified the pixel rendering loops in both
-    engine.js (live animation) and render-phases.js (offline video) to draw in-flight pixels
-    as 2x2 blocks in ImageData. Settled and waiting pixels remain 1x1. Added Phase 17 validations.
+    In-flight pixels are invisible near the source because they're the same color as neighbors.
+    Will bump PIXEL_FLIGHT_SIZE to 3 and add PIXEL_FLIGHT_BOOST (brightness boost of 60) so
+    in-flight pixels are visually distinct. Changes in config.js, engine.js, render-phases.js,
+    and validations.js.
   </plan_summary>
   <blockers>none</blockers>
 </progress>

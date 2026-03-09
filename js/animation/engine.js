@@ -139,6 +139,7 @@ function animationLoop(timestamp) {
   var settled = 0;
   var flightSize = CONFIG.PIXEL_FLIGHT_SIZE;
   var halfFlight = Math.floor(flightSize / 2);
+  var boost = CONFIG.PIXEL_FLIGHT_BOOST;
 
   for (var i = 0; i < count; i++) {
     var st = startTimes[i];
@@ -163,6 +164,7 @@ function animationLoop(timestamp) {
     var ix = Math.round(px), iy = Math.round(py);
     var cr = colors[i * 4], cg = colors[i * 4 + 1], cb = colors[i * 4 + 2], ca = colors[i * 4 + 3];
     if (inFlight) {
+      var br = Math.min(255, cr + boost), bg = Math.min(255, cg + boost), bb = Math.min(255, cb + boost);
       for (var dy = -halfFlight; dy < flightSize - halfFlight; dy++) {
         var wy = iy + dy;
         if (wy < 0 || wy >= canvasHeight) continue;
@@ -170,7 +172,7 @@ function animationLoop(timestamp) {
           var wx = ix + dx;
           if (wx < 0 || wx >= canvasWidth) continue;
           var off = (wy * canvasWidth + wx) * 4;
-          pixels[off] = cr; pixels[off + 1] = cg; pixels[off + 2] = cb; pixels[off + 3] = ca;
+          pixels[off] = br; pixels[off + 1] = bg; pixels[off + 2] = bb; pixels[off + 3] = ca;
         }
       }
     } else {

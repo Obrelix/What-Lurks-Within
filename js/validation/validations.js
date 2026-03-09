@@ -1282,13 +1282,16 @@ VALIDATIONS.push(validate_phase16_noStartRecordingExport);
  */
 function validate_phase17_configPixelFlightSize() {
   var val = CONFIG.PIXEL_FLIGHT_SIZE;
-  var pass = typeof val === 'number' && Number.isInteger(val) && val >= 1;
+  var sizeOk = typeof val === 'number' && Number.isInteger(val) && val >= 1;
+  var boost = CONFIG.PIXEL_FLIGHT_BOOST;
+  var boostOk = typeof boost === 'number' && boost >= 0 && boost <= 255;
+  var pass = sizeOk && boostOk;
   return {
     pass: pass,
     name: 'phase17_configPixelFlightSize',
     detail: pass
-      ? 'PIXEL_FLIGHT_SIZE=' + val
-      : 'Missing or invalid PIXEL_FLIGHT_SIZE: ' + val
+      ? 'PIXEL_FLIGHT_SIZE=' + val + ' PIXEL_FLIGHT_BOOST=' + boost
+      : 'sizeOk=' + sizeOk + ' boostOk=' + boostOk
   };
 }
 VALIDATIONS.push(validate_phase17_configPixelFlightSize);
