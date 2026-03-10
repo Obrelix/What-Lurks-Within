@@ -102,6 +102,9 @@ export function initEvents() {
     var newRes = parseInt(selectQuality.value, 10);
     APP_STATE.selectedResolution = newRes;
     reprocessOnResolutionChange(newRes);
+    if (APP_STATE.hdRecording && newRes >= 768) {
+      showToast('HD recording at 768px may be slow on some devices.', 'info');
+    }
   });
 
   // Pattern select
@@ -133,6 +136,15 @@ export function initEvents() {
       } else {
         targetPreviewImg.classList.add('hidden');
       }
+    }
+  });
+
+  // HD recording toggle
+  var toggleHd = document.getElementById('toggle-hd-recording');
+  toggleHd?.addEventListener('change', function() {
+    APP_STATE.hdRecording = toggleHd.checked;
+    if (toggleHd.checked && APP_STATE.selectedResolution >= 768) {
+      showToast('HD recording at 768px may be slow on some devices.', 'info');
     }
   });
 

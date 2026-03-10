@@ -12,40 +12,45 @@ import { drawWatermark } from './recorder.js';
 /**
  * @description Renders the opening hold phase (source centered).
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} canvasWidth
- * @param {number} size
+ * @param {number} canvasWidth - Scaled canvas width
+ * @param {number} size - Original image size (unscaled)
+ * @param {number} scale - Render scale multiplier
  */
-export function renderOpenHold(ctx, canvasWidth, size) {
-  var centerX = (canvasWidth - size) / 2;
-  ctx.clearRect(0, 0, canvasWidth, size);
-  ctx.drawImage(APP_STATE.sourceImageCanvas, centerX, 0);
-  drawWatermark(ctx, canvasWidth, size);
+export function renderOpenHold(ctx, canvasWidth, size, scale) {
+  var scaledSize = Math.round(size * scale);
+  var centerX = (canvasWidth - scaledSize) / 2;
+  ctx.clearRect(0, 0, canvasWidth, scaledSize);
+  ctx.drawImage(APP_STATE.sourceImageCanvas, centerX, 0, scaledSize, scaledSize);
+  drawWatermark(ctx, canvasWidth, scaledSize);
 }
 
 /**
  * @description Renders the opening slide phase (source sliding from center to left).
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} canvasWidth
- * @param {number} size
+ * @param {number} canvasWidth - Scaled canvas width
+ * @param {number} size - Original image size (unscaled)
+ * @param {number} scale - Render scale multiplier
  * @param {number} t - Progress 0..1
  */
-export function renderOpenSlide(ctx, canvasWidth, size, t) {
-  var centerX = (canvasWidth - size) / 2;
-  ctx.clearRect(0, 0, canvasWidth, size);
-  ctx.drawImage(APP_STATE.sourceImageCanvas, centerX * (1 - easeInOutCubic(t)), 0);
-  drawWatermark(ctx, canvasWidth, size);
+export function renderOpenSlide(ctx, canvasWidth, size, scale, t) {
+  var scaledSize = Math.round(size * scale);
+  var centerX = (canvasWidth - scaledSize) / 2;
+  ctx.clearRect(0, 0, canvasWidth, scaledSize);
+  ctx.drawImage(APP_STATE.sourceImageCanvas, centerX * (1 - easeInOutCubic(t)), 0, scaledSize, scaledSize);
+  drawWatermark(ctx, canvasWidth, scaledSize);
 }
 
 /**
  * @description Renders one frame of the pixel migration phase.
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} canvasWidth
- * @param {number} canvasHeight
+ * @param {number} canvasWidth - Scaled canvas width
+ * @param {number} canvasHeight - Scaled canvas height
+ * @param {number} scale - Render scale multiplier
  * @param {number} elapsed - Time since animation phase started (ms)
  * @param {Float64Array} departures - Pre-computed departure times
  * @returns {number} Number of settled pixels
  */
-export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, departures) {
+export function renderPixelFrame(ctx, canvasWidth, canvasHeight, scale, elapsed, departures) {
   var count = APP_STATE.mapping.length;
   var sourceXY = APP_STATE.sourceXY;
   var targetXY = APP_STATE.targetXY;
@@ -64,8 +69,8 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
   // Pass 1: draw stationary pixels (waiting at source or settled at target)
   for (var i = 0; i < count; i++) {
     var dep = departures[i];
-    var sx = sourceXY[i * 2], sy = sourceXY[i * 2 + 1];
-    var tx = targetXY[i * 2], ty = targetXY[i * 2 + 1];
+    var sx = sourceXY[i * 2] * scale, sy = sourceXY[i * 2 + 1] * scale;
+    var tx = targetXY[i * 2] * scale, ty = targetXY[i * 2 + 1] * scale;
     var px, py;
 
     if (elapsed < dep) {
@@ -94,13 +99,13 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
     var pixelElapsed = elapsed - dep;
     var dur = tweenDurations[i];
     if (pixelElapsed >= dur) continue;
-    var sx = sourceXY[i * 2], sy = sourceXY[i * 2 + 1];
-    var tx = targetXY[i * 2], ty = targetXY[i * 2 + 1];
+    var sx = sourceXY[i * 2] * scale, sy = sourceXY[i * 2 + 1] * scale;
+    var tx = targetXY[i * 2] * scale, ty = targetXY[i * 2 + 1] * scale;
     var easeFn = EASING_FUNCTIONS[easingIndices[i]];
     var t = easeFn(pixelElapsed / dur);
     var arc = 4 * t * (1 - t);
-    var px = sx + (tx - sx) * t + Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * arc;
-    var py = sy + (ty - sy) * t + Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * arc;
+    var px = sx + (tx - sx) * t + Math.sin(i * 0.1) * CONFIG.ARC_MAGNITUDE * scale * arc;
+    var py = sy + (ty - sy) * t + Math.cos(i * 0.07) * CONFIG.ARC_MAGNITUDE * scale * arc;
     var ix = Math.round(px), iy = Math.round(py);
     var cr = colors[i * 4], cg = colors[i * 4 + 1], cb = colors[i * 4 + 2], ca = colors[i * 4 + 3];
     var br = Math.min(255, cr + boost), bg = Math.min(255, cg + boost), bb = Math.min(255, cb + boost);
@@ -124,28 +129,32 @@ export function renderPixelFrame(ctx, canvasWidth, canvasHeight, elapsed, depart
 /**
  * @description Renders the closing slide phase (result sliding from right to center).
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} canvasWidth
- * @param {number} size
- * @param {number} gapPx
+ * @param {number} canvasWidth - Scaled canvas width
+ * @param {number} size - Original image size (unscaled)
+ * @param {number} gapPx - Original gap (unscaled)
+ * @param {number} scale - Render scale multiplier
  * @param {number} t - Progress 0..1
  */
-export function renderCloseSlide(ctx, canvasWidth, size, gapPx, t) {
-  var fromX = size + gapPx;
-  var centerX = (canvasWidth - size) / 2;
-  ctx.clearRect(0, 0, canvasWidth, size);
-  ctx.drawImage(APP_STATE.targetImageCanvas, fromX + (centerX - fromX) * easeInOutCubic(t), 0);
-  drawWatermark(ctx, canvasWidth, size);
+export function renderCloseSlide(ctx, canvasWidth, size, gapPx, scale, t) {
+  var scaledSize = Math.round(size * scale);
+  var fromX = (size + gapPx) * scale;
+  var centerX = (canvasWidth - scaledSize) / 2;
+  ctx.clearRect(0, 0, canvasWidth, scaledSize);
+  ctx.drawImage(APP_STATE.targetImageCanvas, fromX + (centerX - fromX) * easeInOutCubic(t), 0, scaledSize, scaledSize);
+  drawWatermark(ctx, canvasWidth, scaledSize);
 }
 
 /**
  * @description Renders the closing hold phase (result centered).
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} canvasWidth
- * @param {number} size
+ * @param {number} canvasWidth - Scaled canvas width
+ * @param {number} size - Original image size (unscaled)
+ * @param {number} scale - Render scale multiplier
  */
-export function renderCloseHold(ctx, canvasWidth, size) {
-  var centerX = (canvasWidth - size) / 2;
-  ctx.clearRect(0, 0, canvasWidth, size);
-  ctx.drawImage(APP_STATE.targetImageCanvas, centerX, 0);
-  drawWatermark(ctx, canvasWidth, size);
+export function renderCloseHold(ctx, canvasWidth, size, scale) {
+  var scaledSize = Math.round(size * scale);
+  var centerX = (canvasWidth - scaledSize) / 2;
+  ctx.clearRect(0, 0, canvasWidth, scaledSize);
+  ctx.drawImage(APP_STATE.targetImageCanvas, centerX, 0, scaledSize, scaledSize);
+  drawWatermark(ctx, canvasWidth, scaledSize);
 }

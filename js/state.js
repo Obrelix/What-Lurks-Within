@@ -40,6 +40,9 @@ export const APP_STATE = {
   recordedVideoBlob: null,
   resolvedVideoMime: null,
 
+  // HD recording toggle (Phase 19)
+  hdRecording: false,
+
   // Buffer phase state machine (Phase 14d)
   animPhase: null,
   animPhaseStart: null,

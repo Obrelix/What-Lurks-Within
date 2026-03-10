@@ -1,16 +1,17 @@
 <progress>
-  <phase>Phase 18: Speed Variation and Mixed Easing Curves</phase>
-  <status>COMPLETE</status>
-  <last_completed_step>VERIFY END-TO-END</last_completed_step>
-  <next_step>COMMIT</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/animation/engine.js, js/animation/buffer-phases.js, js/video/render-phases.js, js/video/offline-render.js, js/utils.js, js/state.js, js/state-management.js, js/validation/validations.js</files_read_this_session>
+  <phase>Phase 19: HD Video Recording</phase>
+  <status>IN PROGRESS</status>
+  <last_completed_step>EXPLORE</last_completed_step>
+  <next_step>THINK HARD</next_step>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/events.js, js/video/recorder.js, js/video/offline-render.js, js/video/render-phases.js, js/animation/engine.js, js/animation/buffer-phases.js, js/state-management.js, js/ui/options.js, index.html, css/styles.css</files_read_this_session>
   <plan_summary>
-    Added per-pixel speed variation and mixed easing curves to the in-flight animation.
-    New CONFIG key: TWEEN_SPEED_VARIANCE (0.4 = ±40% duration spread).
-    New easing functions in utils.js: easeOutExpo, easeOutBack, easeOutQuart.
-    buildAnimationArrays generates per-pixel tweenDurations (Float32Array) and easingIndices (Uint8Array)
-    using deterministic index-based hashing. Both engine.js and render-phases.js use per-pixel values.
-    All 6 Phase 18 validations pass. Implementation complete.
+    Add an HD recording option that scales the offline video render canvas by a configurable multiplier (CONFIG.VIDEO_RENDER_SCALE, default 2).
+    The user toggles "HD Recording" via a checkbox on the setup screen. When enabled and the user clicks "Download Video",
+    the offline renderer creates its canvas at scale×size instead of 1×size. For 768px resolution, a warning toast is shown
+    about potential performance impact. The live animation is NOT affected — only the offline render in offline-render.js
+    and render-phases.js. Files to modify: config.js (VIDEO_RENDER_SCALE), state.js (hdRecording), index.html (checkbox),
+    events.js (wire checkbox), css/styles.css (style), offline-render.js (apply scale to canvas + pass to renderers),
+    render-phases.js (accept scale param, multiply coordinates), validation/validations.js (new validations).
   </plan_summary>
   <blockers>none</blockers>
 </progress>

@@ -348,6 +348,26 @@ input[type="file"] {
   padding: 0.4rem;
 }
 
+/* ─── HD Recording Toggle ─── */
+.hd-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  opacity: 0.7;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hd-toggle input[type="checkbox"] {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  accent-color: var(--text-accent);
+  cursor: pointer;
+}
+
 /* ─── Custom Upload Expand Area ─── */
 #custom-target-area {
   width: 100%;

@@ -1573,6 +1573,109 @@ function validate_phase18_perPixelUsage() {
 }
 VALIDATIONS.push(validate_phase18_perPixelUsage);
 
+// ─── Phase 19 Validations ───
+
+/**
+ * @description Validates that CONFIG.VIDEO_RENDER_SCALE exists and is a number >= 1.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase19_configRenderScale() {
+  var scale = CONFIG.VIDEO_RENDER_SCALE;
+  var valid = typeof scale === 'number' && scale >= 1;
+  return {
+    pass: valid,
+    name: 'phase19_configRenderScale',
+    detail: valid
+      ? 'VIDEO_RENDER_SCALE = ' + scale
+      : 'VIDEO_RENDER_SCALE must be a number >= 1, got: ' + scale
+  };
+}
+VALIDATIONS.push(validate_phase19_configRenderScale);
+
+/**
+ * @description Validates that APP_STATE has an hdRecording boolean field.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase19_stateHdRecording() {
+  var has = 'hdRecording' in APP_STATE;
+  var isBool = typeof APP_STATE.hdRecording === 'boolean';
+  var pass = has && isBool;
+  return {
+    pass: pass,
+    name: 'phase19_stateHdRecording',
+    detail: pass
+      ? 'APP_STATE.hdRecording exists and is boolean'
+      : 'APP_STATE.hdRecording missing or not boolean'
+  };
+}
+VALIDATIONS.push(validate_phase19_stateHdRecording);
+
+/**
+ * @description Validates that the HD recording checkbox exists in the DOM.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase19_hdCheckboxExists() {
+  var checkbox = document.getElementById('toggle-hd-recording');
+  var pass = checkbox !== null && checkbox.type === 'checkbox';
+  return {
+    pass: pass,
+    name: 'phase19_hdCheckboxExists',
+    detail: pass
+      ? 'HD recording checkbox found in DOM'
+      : 'Missing checkbox with id="toggle-hd-recording"'
+  };
+}
+VALIDATIONS.push(validate_phase19_hdCheckboxExists);
+
+/**
+ * @description Validates that offline-render.js applies VIDEO_RENDER_SCALE to canvas dimensions.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase19_offlineRenderScale() {
+  var errors = [];
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'js/video/offline-render.js', false);
+    xhr.send();
+    var src = xhr.responseText;
+    if (src.indexOf('VIDEO_RENDER_SCALE') === -1) errors.push('offline-render.js missing VIDEO_RENDER_SCALE reference');
+    if (src.indexOf('hdRecording') === -1) errors.push('offline-render.js missing hdRecording check');
+  } catch (e) {
+    return { pass: false, name: 'phase19_offlineRenderScale', detail: 'Failed to read source: ' + e.message };
+  }
+  var pass = errors.length === 0;
+  return {
+    pass: pass,
+    name: 'phase19_offlineRenderScale',
+    detail: pass ? 'Offline render uses VIDEO_RENDER_SCALE and hdRecording' : errors.join('; ')
+  };
+}
+VALIDATIONS.push(validate_phase19_offlineRenderScale);
+
+/**
+ * @description Validates that render-phases.js accepts and uses a scale parameter.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase19_renderPhasesScale() {
+  var errors = [];
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', 'js/video/render-phases.js', false);
+    xhr.send();
+    var src = xhr.responseText;
+    if (src.indexOf('scale') === -1) errors.push('render-phases.js missing scale parameter');
+  } catch (e) {
+    return { pass: false, name: 'phase19_renderPhasesScale', detail: 'Failed to read source: ' + e.message };
+  }
+  var pass = errors.length === 0;
+  return {
+    pass: pass,
+    name: 'phase19_renderPhasesScale',
+    detail: pass ? 'render-phases.js uses scale parameter' : errors.join('; ')
+  };
+}
+VALIDATIONS.push(validate_phase19_renderPhasesScale);
+
 // ─── Validation Runner ───
 
 /**

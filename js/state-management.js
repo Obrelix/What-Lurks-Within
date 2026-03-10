@@ -48,6 +48,7 @@ export function resetState() {
 
   APP_STATE.recordedVideoBlob = null;
   APP_STATE.resolvedVideoMime = null;
+  APP_STATE.hdRecording = false;
   APP_STATE.animPhase = null;
   APP_STATE.animPhaseStart = null;
   APP_STATE.sourceImageCanvas = null;

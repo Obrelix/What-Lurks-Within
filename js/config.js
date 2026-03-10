@@ -59,6 +59,7 @@ export const CONFIG = {
   // Video recording
   VIDEO_FRAMERATE: 60,
   VIDEO_BITRATE: 12000000,
+  VIDEO_RENDER_SCALE: 2,
   VIDEO_MIME_PRIORITY: [
     'video/mp4;codecs=avc1.42E01E',
     'video/webm;codecs=vp9',

@@ -44,22 +44,24 @@ function buildDepartureTimes(count, pixelsPerMs) {
 /**
  * @description Dispatches to the correct phase renderer for a given simulated time.
  * @param {CanvasRenderingContext2D} ctx
- * @param {number} cw - Canvas width
- * @param {number} size - Image size
- * @param {number} gapPx
+ * @param {number} cw - Scaled canvas width
+ * @param {number} ch - Scaled canvas height
+ * @param {number} size - Original image size (unscaled)
+ * @param {number} gapPx - Original gap (unscaled)
+ * @param {number} scale - Render scale multiplier
  * @param {number} t - Simulated time in ms
  * @param {Array<number>} bounds - [openHoldMs, openSlideMs, animMs, closeSlideMs]
  * @param {Float64Array} departures
  */
-function renderFrameAtTime(ctx, cw, size, gapPx, t, bounds, departures) {
-  if (t < bounds[0]) { renderOpenHold(ctx, cw, size); return; }
+function renderFrameAtTime(ctx, cw, ch, size, gapPx, scale, t, bounds, departures) {
+  if (t < bounds[0]) { renderOpenHold(ctx, cw, size, scale); return; }
   t -= bounds[0];
-  if (t < bounds[1]) { renderOpenSlide(ctx, cw, size, t / bounds[1]); return; }
+  if (t < bounds[1]) { renderOpenSlide(ctx, cw, size, scale, t / bounds[1]); return; }
   t -= bounds[1];
-  if (t < bounds[2]) { renderPixelFrame(ctx, cw, size, t, departures); return; }
+  if (t < bounds[2]) { renderPixelFrame(ctx, cw, ch, scale, t, departures); return; }
   t -= bounds[2];
-  if (t < bounds[3]) { renderCloseSlide(ctx, cw, size, gapPx, t / bounds[3]); return; }
-  renderCloseHold(ctx, cw, size);
+  if (t < bounds[3]) { renderCloseSlide(ctx, cw, size, gapPx, scale, t / bounds[3]); return; }
+  renderCloseHold(ctx, cw, size, scale);
 }
 
 // ═══════════════════════════════════════════
@@ -79,10 +81,13 @@ export function renderOfflineVideo(onProgress) {
 
   var size = APP_STATE.animImageSize;
   var gapPx = APP_STATE.animGapPx;
+  var scale = APP_STATE.hdRecording ? CONFIG.VIDEO_RENDER_SCALE : 1;
   var cw = size * 2 + gapPx;
+  var scaledCw = Math.round(cw * scale);
+  var scaledSize = Math.round(size * scale);
   var canvas = document.createElement('canvas');
-  canvas.width = cw;
-  canvas.height = size;
+  canvas.width = scaledCw;
+  canvas.height = scaledSize;
   var ctx = canvas.getContext('2d');
 
   var mimeType = resolveVideoMimeType();
@@ -131,7 +136,7 @@ export function renderOfflineVideo(onProgress) {
     var frame = 0;
     function renderNext() {
       if (frame >= totalFrames) { recorder.stop(); return; }
-      renderFrameAtTime(ctx, cw, size, gapPx, frame * frameMs, bounds, departures);
+      renderFrameAtTime(ctx, scaledCw, scaledSize, size, gapPx, scale, frame * frameMs, bounds, departures);
       if (hasRequestFrame) track.requestFrame();
       frame++;
       if (onProgress) onProgress(Math.round((frame / totalFrames) * 100));
