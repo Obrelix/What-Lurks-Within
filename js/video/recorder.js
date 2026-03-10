@@ -98,7 +98,10 @@ export function startRecording(canvas) {
       track.requestFrame = function() {};
     }
 
-    var recorder = new MediaRecorder(stream, { mimeType: mimeType });
+    var recorder = new MediaRecorder(stream, {
+      mimeType: mimeType,
+      videoBitsPerSecond: CONFIG.VIDEO_BITRATE
+    });
 
     recorder.ondataavailable = function(e) {
       if (e.data && e.data.size > 0) {
