@@ -75,21 +75,20 @@ export function createPixelBufferFromData(data, width, height) {
 }
 
 /**
- * @description Loads an image file and returns a Promise resolving to an HTMLImageElement.
+ * @description Loads an image file and returns a Promise resolving to { img, objectURL }.
  * @param {File} file - Image file
- * @returns {Promise<HTMLImageElement>}
+ * @returns {Promise<{ img: HTMLImageElement, objectURL: string }>}
  */
 export function loadImageFromFile(file) {
   return new Promise(function(resolve, reject) {
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = function() { resolve(img); };
+    img.onload = function() { resolve({ img: img, objectURL: url }); };
     img.onerror = function() {
       URL.revokeObjectURL(url);
       reject(new Error('Failed to load image'));
     };
     img.src = url;
-    img._objectURL = url;
   });
 }
 
@@ -114,22 +113,22 @@ export async function handleSourceUpload(file) {
     showToast('File is over 10 MB — processing may be slow.', 'info');
   }
   try {
-    const img = await loadImageFromFile(file);
+    const result = await loadImageFromFile(file);
 
     const preview = document.getElementById('source-preview');
     if (preview) {
       if (APP_STATE.sourceObjectURL) URL.revokeObjectURL(APP_STATE.sourceObjectURL);
-      APP_STATE.sourceObjectURL = img._objectURL;
-      preview.src = img._objectURL;
+      APP_STATE.sourceObjectURL = result.objectURL;
+      preview.src = result.objectURL;
       preview.classList.remove('hidden');
     }
 
     const res = APP_STATE.selectedResolution;
-    if ((img.naturalWidth || img.width) < res || (img.naturalHeight || img.height) < res) {
+    if ((result.img.naturalWidth || result.img.width) < res || (result.img.naturalHeight || result.img.height) < res) {
       showToast('Image is smaller than target resolution — upscaling may reduce quality.', 'info');
     }
 
-    APP_STATE.sourceBuffer = createPixelBuffer(img, res);
+    APP_STATE.sourceBuffer = createPixelBuffer(result.img, res);
     showScreen('setup');
     updateRevealButton();
   } catch (err) {
@@ -144,7 +143,7 @@ export async function handleSourceUpload(file) {
  */
 function loadImageFromURL(url) {
   return new Promise(function(resolve, reject) {
-    var img = new Image();
+    const img = new Image();
     img.onload = function() { resolve(img); };
     img.onerror = function() { reject(new Error('Failed to load image from URL')); };
     img.src = url;
@@ -163,7 +162,7 @@ export async function reprocessOnResolutionChange(newResolution) {
 
   if (APP_STATE.sourceObjectURL && APP_STATE.sourceBuffer) {
     try {
-      var srcImg = await loadImageFromURL(APP_STATE.sourceObjectURL);
+      const srcImg = await loadImageFromURL(APP_STATE.sourceObjectURL);
       APP_STATE.sourceBuffer = createPixelBuffer(srcImg, newResolution);
     } catch (err) {
       showToast('Error reprocessing source image: ' + err.message, 'error');
@@ -172,7 +171,7 @@ export async function reprocessOnResolutionChange(newResolution) {
 
   if (APP_STATE.targetObjectURL && APP_STATE.targetBuffer) {
     try {
-      var tgtImg = await loadImageFromURL(APP_STATE.targetObjectURL);
+      const tgtImg = await loadImageFromURL(APP_STATE.targetObjectURL);
       APP_STATE.targetBuffer = createPixelBuffer(tgtImg, newResolution);
     } catch (err) {
       showToast('Error reprocessing target image: ' + err.message, 'error');
@@ -190,14 +189,14 @@ export async function handleTargetUpload(file) {
     showToast('File is over 10 MB — processing may be slow.', 'info');
   }
   try {
-    const img = await loadImageFromFile(file);
+    const result = await loadImageFromFile(file);
 
     const preview = document.getElementById('target-preview');
     const toggleCheckbox = document.getElementById('toggle-target-preview');
     if (preview) {
       if (APP_STATE.targetObjectURL) URL.revokeObjectURL(APP_STATE.targetObjectURL);
-      APP_STATE.targetObjectURL = img._objectURL;
-      preview.src = img._objectURL;
+      APP_STATE.targetObjectURL = result.objectURL;
+      preview.src = result.objectURL;
       if (toggleCheckbox && toggleCheckbox.checked) {
         preview.classList.remove('hidden');
       } else {
@@ -205,7 +204,7 @@ export async function handleTargetUpload(file) {
       }
     }
 
-    APP_STATE.targetBuffer = createPixelBuffer(img, APP_STATE.selectedResolution);
+    APP_STATE.targetBuffer = createPixelBuffer(result.img, APP_STATE.selectedResolution);
     updateRevealButton();
   } catch (err) {
     showToast('Error loading target image: ' + err.message, 'error');

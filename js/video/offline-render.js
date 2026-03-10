@@ -17,13 +17,13 @@ import {
  * @returns {number} Total duration in ms
  */
 function calcTotalDuration() {
-  var openHold = Math.max(0, CONFIG.VIDEO_BUFFER_OPEN_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS);
-  var openSlide = CONFIG.VIDEO_BUFFER_SLIDE_MS;
-  var maxTween = CONFIG.TWEEN_DURATION_MS * (1 + CONFIG.TWEEN_SPEED_VARIANCE);
-  var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - maxTween);
-  var animDuration = departureMs + maxTween;
-  var closeSlide = CONFIG.VIDEO_BUFFER_SLIDE_MS;
-  var closeHold = Math.max(0, CONFIG.VIDEO_BUFFER_CLOSE_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS);
+  const openHold = Math.max(0, CONFIG.VIDEO_BUFFER_OPEN_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS);
+  const openSlide = CONFIG.VIDEO_BUFFER_SLIDE_MS;
+  const maxTween = CONFIG.TWEEN_DURATION_MS * (1 + CONFIG.TWEEN_SPEED_VARIANCE);
+  const departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - maxTween);
+  const animDuration = departureMs + maxTween;
+  const closeSlide = CONFIG.VIDEO_BUFFER_SLIDE_MS;
+  const closeHold = Math.max(0, CONFIG.VIDEO_BUFFER_CLOSE_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS);
   return openHold + openSlide + animDuration + closeSlide + closeHold;
 }
 
@@ -34,8 +34,8 @@ function calcTotalDuration() {
  * @returns {Float64Array} Departure time for each pixel
  */
 function buildDepartureTimes(count, pixelsPerMs) {
-  var times = new Float64Array(count);
-  for (var i = 0; i < count; i++) {
+  const times = new Float64Array(count);
+  for (let i = 0; i < count; i++) {
     times[i] = i / pixelsPerMs;
   }
   return times;
@@ -79,47 +79,47 @@ export function renderOfflineVideo(onProgress) {
     return Promise.reject(new Error('Video recording not supported in this browser.'));
   }
 
-  var size = APP_STATE.animImageSize;
-  var gapPx = APP_STATE.animGapPx;
-  var scale = APP_STATE.hdRecording ? CONFIG.VIDEO_RENDER_SCALE : 1;
-  var cw = size * 2 + gapPx;
-  var scaledCw = Math.round(cw * scale);
-  var scaledSize = Math.round(size * scale);
-  var canvas = document.createElement('canvas');
+  const size = APP_STATE.animImageSize;
+  const gapPx = APP_STATE.animGapPx;
+  const scale = APP_STATE.hdRecording ? CONFIG.VIDEO_RENDER_SCALE : 1;
+  const cw = size * 2 + gapPx;
+  const scaledCw = Math.round(cw * scale);
+  const scaledSize = Math.round(size * scale);
+  const canvas = document.createElement('canvas');
   canvas.width = scaledCw;
   canvas.height = scaledSize;
-  var ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d');
 
-  var mimeType = resolveVideoMimeType();
+  const mimeType = resolveVideoMimeType();
   APP_STATE.resolvedVideoMime = mimeType;
 
   // Prefer captureStream(0) + requestFrame() for precise frame control.
   // Fall back to auto-capture if requestFrame is not supported.
-  var stream = canvas.captureStream(0);
-  var track = stream.getVideoTracks()[0];
-  var hasRequestFrame = track && typeof track.requestFrame === 'function';
+  let stream = canvas.captureStream(0);
+  let track = stream.getVideoTracks()[0];
+  const hasRequestFrame = track && typeof track.requestFrame === 'function';
   if (!hasRequestFrame) {
     stream = canvas.captureStream(CONFIG.VIDEO_FRAMERATE);
     track = stream.getVideoTracks()[0];
   }
 
-  var recorder = new MediaRecorder(stream, {
+  const recorder = new MediaRecorder(stream, {
     mimeType: mimeType,
     videoBitsPerSecond: CONFIG.VIDEO_BITRATE
   });
 
-  var chunks = [];
+  const chunks = [];
   recorder.ondataavailable = function(e) {
     if (e.data && e.data.size > 0) chunks.push(e.data);
   };
 
-  var frameMs = 1000 / CONFIG.VIDEO_FRAMERATE;
-  var totalFrames = Math.ceil(calcTotalDuration() / frameMs);
-  var count = APP_STATE.mapping.length;
-  var maxTween = CONFIG.TWEEN_DURATION_MS * (1 + CONFIG.TWEEN_SPEED_VARIANCE);
-  var departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - maxTween);
-  var departures = buildDepartureTimes(count, count / departureMs);
-  var bounds = [
+  const frameMs = 1000 / CONFIG.VIDEO_FRAMERATE;
+  const totalFrames = Math.ceil(calcTotalDuration() / frameMs);
+  const count = APP_STATE.mapping.length;
+  const maxTween = CONFIG.TWEEN_DURATION_MS * (1 + CONFIG.TWEEN_SPEED_VARIANCE);
+  const departureMs = Math.max(1000, CONFIG.TARGET_DURATION_S * 1000 - maxTween);
+  const departures = buildDepartureTimes(count, count / departureMs);
+  const bounds = [
     Math.max(0, CONFIG.VIDEO_BUFFER_OPEN_MS - CONFIG.VIDEO_BUFFER_SLIDE_MS),
     CONFIG.VIDEO_BUFFER_SLIDE_MS,
     departureMs + maxTween,
@@ -133,7 +133,7 @@ export function renderOfflineVideo(onProgress) {
     recorder.onerror = function(e) { reject(e.error || new Error('Recording error')); };
     recorder.start();
 
-    var frame = 0;
+    let frame = 0;
     function renderNext() {
       if (frame >= totalFrames) { recorder.stop(); return; }
       renderFrameAtTime(ctx, scaledCw, scaledSize, size, gapPx, scale, frame * frameMs, bounds, departures);

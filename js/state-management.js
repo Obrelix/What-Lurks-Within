@@ -53,14 +53,15 @@ export function resetState() {
   APP_STATE.animPhaseStart = null;
   APP_STATE.sourceImageCanvas = null;
   APP_STATE.targetImageCanvas = null;
-  var videoBtn = document.getElementById('btn-download-video');
+  APP_STATE.animImageData = null;
+  const videoBtn = document.getElementById('btn-download-video');
   if (videoBtn) videoBtn.disabled = true;
 
-  var preview = document.getElementById('source-preview');
+  const preview = document.getElementById('source-preview');
   if (preview) { preview.src = ''; preview.classList.add('hidden'); }
-  var tgtPreview = document.getElementById('target-preview');
+  const tgtPreview = document.getElementById('target-preview');
   if (tgtPreview) { tgtPreview.src = ''; tgtPreview.classList.add('hidden'); }
-  var revealBtn = document.getElementById('btn-reveal');
+  const revealBtn = document.getElementById('btn-reveal');
   if (revealBtn) revealBtn.disabled = true;
 }
 
@@ -68,7 +69,7 @@ export function resetState() {
  * @description Downloads the result canvas as a PNG.
  */
 export function downloadResult() {
-  var canvas = document.getElementById('result-canvas');
+  const canvas = document.getElementById('result-canvas');
   if (!canvas) {
     showToast('No result canvas found.', 'error');
     return;
@@ -79,8 +80,8 @@ export function downloadResult() {
         showToast('Failed to create image blob.', 'error');
         return;
       }
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
       a.href = url;
       a.download = 'what-lurks-within-' + Date.now() + '.png';
       document.body.appendChild(a);
@@ -107,7 +108,7 @@ export function downloadVideo() {
     return;
   }
 
-  var btn = document.getElementById('btn-download-video');
+  const btn = document.getElementById('btn-download-video');
   if (btn) { btn.disabled = true; btn.textContent = 'Rendering 0%...'; }
 
   renderOfflineVideo(function(pct) {
@@ -128,9 +129,9 @@ export function downloadVideo() {
  * @param {string} mime - MIME type
  */
 function triggerVideoDownload(blob, mime) {
-  var ext = (mime && mime.startsWith('video/mp4')) ? '.mp4' : '.webm';
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
+  const ext = (mime && mime.startsWith('video/mp4')) ? '.mp4' : '.webm';
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
   a.href = url;
   a.download = 'what-lurks-within-' + Date.now() + ext;
   document.body.appendChild(a);
@@ -149,7 +150,7 @@ export function tryAgain() {
     APP_STATE.animationFrameId = null;
   }
 
-  var videoBtn = document.getElementById('btn-download-video');
+  const videoBtn = document.getElementById('btn-download-video');
   if (videoBtn) videoBtn.disabled = true;
   APP_STATE.recordedVideoBlob = null;
 

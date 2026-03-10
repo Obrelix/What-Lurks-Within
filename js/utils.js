@@ -34,7 +34,7 @@ export function calcHue(r, g, b) {
 
   if (d === 0) return 0;
 
-  var h;
+  let h;
   if (max === rn) {
     h = ((gn - bn) / d) % 6;
   } else if (max === gn) {
@@ -74,8 +74,8 @@ export function easeOutExpo(t) {
  * @returns {number} Eased value (0 to 1)
  */
 export function easeOutBack(t) {
-  var c1 = 1.70158;
-  var c3 = c1 + 1;
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
   return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
 }
 
@@ -100,9 +100,9 @@ export const EASING_FUNCTIONS = [easeInOutCubic, easeOutExpo, easeOutBack, easeO
  * @returns {Array} The same array, shuffled
  */
 export function fisherYatesShuffle(arr) {
-  for (var i = arr.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
-    var tmp = arr[i];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i];
     arr[i] = arr[j];
     arr[j] = tmp;
   }

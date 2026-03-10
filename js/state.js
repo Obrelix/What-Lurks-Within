@@ -30,7 +30,12 @@ export const APP_STATE = {
   // Dual-canvas layout (allocated in Phase 6)
   animImageSize: null,
   animGapPx: null,
+  animBatchIndex: 0,
+  animSettled: 0,
   pixelsPerMs: 0,
+
+  // Pre-allocated animation ImageData (Phase 20)
+  animImageData: null,
 
   // Ranked default image targets (Phase 9)
   rankedTargets: null,

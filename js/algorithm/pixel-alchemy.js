@@ -14,12 +14,12 @@ import { calcLuminance, calcHue, pixelSortComparator } from '../utils.js';
 export function buildPixelDescriptors(buffer) {
   const descriptors = new Array(buffer.count);
   const data = buffer.data;
-  for (var i = 0; i < buffer.count; i++) {
-    var off = i * 4;
-    var r = data[off];
-    var g = data[off + 1];
-    var b = data[off + 2];
-    var a = data[off + 3];
+  for (let i = 0; i < buffer.count; i++) {
+    const off = i * 4;
+    const r = data[off];
+    const g = data[off + 1];
+    const b = data[off + 2];
+    const a = data[off + 3];
     descriptors[i] = {
       index: i,
       r: r,
@@ -40,14 +40,14 @@ export function buildPixelDescriptors(buffer) {
  * @returns {Array<{ sourceIndex: number, targetIndex: number, r: number, g: number, b: number, a: number, luminance: number }>}
  */
 export function buildMapping(srcBuf, tgtBuf) {
-  var srcDesc = buildPixelDescriptors(srcBuf);
-  var tgtDesc = buildPixelDescriptors(tgtBuf);
+  const srcDesc = buildPixelDescriptors(srcBuf);
+  const tgtDesc = buildPixelDescriptors(tgtBuf);
 
   srcDesc.sort(pixelSortComparator);
   tgtDesc.sort(pixelSortComparator);
 
-  var mapping = new Array(srcBuf.count);
-  for (var i = 0; i < srcBuf.count; i++) {
+  const mapping = new Array(srcBuf.count);
+  for (let i = 0; i < srcBuf.count; i++) {
     mapping[i] = {
       sourceIndex: srcDesc[i].index,
       targetIndex: tgtDesc[i].index,

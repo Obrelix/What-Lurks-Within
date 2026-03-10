@@ -46,9 +46,6 @@ export const CONFIG = {
   // Toast
   TOAST_DURATION_MS: 4000,
 
-  // Procedural target count
-  PROCEDURAL_TARGET_COUNT: 5,
-
   // Dual-canvas layout
   CANVAS_GAP_RATIO: 0.08,
   MAX_INFLIGHT: 20000,
@@ -93,8 +90,9 @@ export const CONFIG = {
     'defaultImages/img13.jpg',
     'defaultImages/img14.jpg',
     'defaultImages/img15.png',
-    'defaultImages/img16.jpg',
     'defaultImages/img17.jpg',
-    'defaultImages/img18.jpg'
+    'defaultImages/img18.jpg',
+    'defaultImages/img19.jpg',
+    'defaultImages/img20.jpg'
   ]
 };

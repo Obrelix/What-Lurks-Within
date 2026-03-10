@@ -456,6 +456,14 @@ input[type="file"] {
   z-index: 1;
 }
 
+#result-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 1px solid rgba(127, 90, 240, 0.2);
+  max-width: 85vw;
+  max-height: 65vh;
+}
+
 .result-tagline {
   font-size: clamp(1rem, 2.5vw, 1.5rem);
   text-shadow:

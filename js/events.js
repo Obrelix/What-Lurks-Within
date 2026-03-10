@@ -49,7 +49,7 @@ export function initEvents() {
   btnReveal?.addEventListener('click', async function() {
     if (!APP_STATE.sourceBuffer) return;
     if (APP_STATE.targetMode === 'fate') {
-      var overlay = document.getElementById('processing-overlay');
+      const overlay = document.getElementById('processing-overlay');
       if (overlay) overlay.classList.add('active');
       try {
         APP_STATE.targetBuffer = await loadBestMatchingDefaultImage(
@@ -95,11 +95,16 @@ export function initEvents() {
   modal?.addEventListener('click', function(e) {
     if (e.target === modal) modal.classList.remove('active');
   });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && modal?.classList.contains('active')) {
+      modal.classList.remove('active');
+    }
+  });
 
   // Quality select
-  var selectQuality = document.getElementById('select-quality');
+  const selectQuality = document.getElementById('select-quality');
   selectQuality?.addEventListener('change', function() {
-    var newRes = parseInt(selectQuality.value, 10);
+    const newRes = parseInt(selectQuality.value, 10);
     APP_STATE.selectedResolution = newRes;
     reprocessOnResolutionChange(newRes);
     if (APP_STATE.hdRecording && newRes >= 768) {
@@ -108,14 +113,14 @@ export function initEvents() {
   });
 
   // Pattern select
-  var selectPattern = document.getElementById('select-pattern');
+  const selectPattern = document.getElementById('select-pattern');
   selectPattern?.addEventListener('change', function() {
     APP_STATE.selectedPattern = selectPattern.value;
   });
 
   // Target mode select
-  var selectTargetMode = document.getElementById('select-target-mode');
-  var customArea = document.getElementById('custom-target-area');
+  const selectTargetMode = document.getElementById('select-target-mode');
+  const customArea = document.getElementById('custom-target-area');
   selectTargetMode?.addEventListener('change', function() {
     APP_STATE.targetMode = selectTargetMode.value;
     if (selectTargetMode.value === 'custom') {
@@ -127,8 +132,8 @@ export function initEvents() {
   });
 
   // Target preview toggle
-  var togglePreview = document.getElementById('toggle-target-preview');
-  var targetPreviewImg = document.getElementById('target-preview');
+  const togglePreview = document.getElementById('toggle-target-preview');
+  const targetPreviewImg = document.getElementById('target-preview');
   togglePreview?.addEventListener('change', function() {
     if (targetPreviewImg && targetPreviewImg.src && targetPreviewImg.src !== '') {
       if (togglePreview.checked) {
@@ -140,7 +145,7 @@ export function initEvents() {
   });
 
   // HD recording toggle
-  var toggleHd = document.getElementById('toggle-hd-recording');
+  const toggleHd = document.getElementById('toggle-hd-recording');
   toggleHd?.addEventListener('change', function() {
     APP_STATE.hdRecording = toggleHd.checked;
     if (toggleHd.checked && APP_STATE.selectedResolution >= 768) {
@@ -149,16 +154,16 @@ export function initEvents() {
   });
 
   // ─── Result screen buttons ───
-  var btnDownload = document.getElementById('btn-download');
+  const btnDownload = document.getElementById('btn-download');
   btnDownload?.addEventListener('click', downloadResult);
 
-  var btnDownloadVideo = document.getElementById('btn-download-video');
+  const btnDownloadVideo = document.getElementById('btn-download-video');
   btnDownloadVideo?.addEventListener('click', downloadVideo);
 
-  var btnRetry = document.getElementById('btn-retry');
+  const btnRetry = document.getElementById('btn-retry');
   btnRetry?.addEventListener('click', tryAgain);
 
-  var btnStartOver = document.getElementById('btn-start-over');
+  const btnStartOver = document.getElementById('btn-start-over');
   btnStartOver?.addEventListener('click', function() {
     resetState();
     showScreen('landing');

@@ -15,19 +15,19 @@ import { generateRandomTarget } from './procedural.js';
  * @returns {Float64Array} Normalized histogram of length CONFIG.HISTOGRAM_BINS
  */
 export function buildLuminanceHistogram(buffer) {
-  var bins = CONFIG.HISTOGRAM_BINS;
-  var hist = new Float64Array(bins);
-  var data = buffer.data;
-  var count = buffer.count;
+  const bins = CONFIG.HISTOGRAM_BINS;
+  const hist = new Float64Array(bins);
+  const data = buffer.data;
+  const count = buffer.count;
 
-  for (var i = 0; i < count; i++) {
-    var off = i * 4;
-    var lum = 0.299 * data[off] + 0.587 * data[off + 1] + 0.114 * data[off + 2];
-    var bin = Math.min(bins - 1, Math.floor(lum / 256 * bins));
+  for (let i = 0; i < count; i++) {
+    const off = i * 4;
+    const lum = 0.299 * data[off] + 0.587 * data[off + 1] + 0.114 * data[off + 2];
+    const bin = Math.min(bins - 1, Math.floor(lum / 256 * bins));
     hist[bin]++;
   }
 
-  for (var j = 0; j < bins; j++) {
+  for (let j = 0; j < bins; j++) {
     hist[j] /= count;
   }
 
@@ -41,8 +41,8 @@ export function buildLuminanceHistogram(buffer) {
  * @returns {number} Similarity score (0 to 1)
  */
 export function histogramIntersection(histA, histB) {
-  var sum = 0;
-  for (var i = 0; i < histA.length; i++) {
+  let sum = 0;
+  for (let i = 0; i < histA.length; i++) {
     sum += Math.min(histA[i], histB[i]);
   }
   return sum;
@@ -55,10 +55,10 @@ export function histogramIntersection(histA, histB) {
  * @returns {number} Index of the best match
  */
 export function findBestMatchIndex(sourceHist, candidateHists) {
-  var bestIdx = 0;
-  var bestScore = -1;
-  for (var i = 0; i < candidateHists.length; i++) {
-    var score = histogramIntersection(sourceHist, candidateHists[i]);
+  let bestIdx = 0;
+  let bestScore = -1;
+  for (let i = 0; i < candidateHists.length; i++) {
+    const score = histogramIntersection(sourceHist, candidateHists[i]);
     if (score > bestScore) {
       bestScore = score;
       bestIdx = i;
@@ -75,9 +75,9 @@ export function findBestMatchIndex(sourceHist, candidateHists) {
  * @returns {Array<{ buffer: object, score: number }>} Sorted best-first, filtered by HISTOGRAM_MIN_SCORE
  */
 export function rankAndFilterDefaults(sourceHist, buffers, histograms) {
-  var scored = [];
-  for (var i = 0; i < buffers.length; i++) {
-    var score = histogramIntersection(sourceHist, histograms[i]);
+  const scored = [];
+  for (let i = 0; i < buffers.length; i++) {
+    const score = histogramIntersection(sourceHist, histograms[i]);
     if (score >= CONFIG.HISTOGRAM_MIN_SCORE) {
       scored.push({ buffer: buffers[i], score: score });
     }
@@ -93,7 +93,7 @@ export function rankAndFilterDefaults(sourceHist, buffers, histograms) {
  */
 export function loadImageFromPath(path) {
   return new Promise(function(resolve, reject) {
-    var img = new Image();
+    const img = new Image();
     img.onload = function() { resolve(img); };
     img.onerror = function() { reject(new Error('Failed to load: ' + path)); };
     img.src = path;
@@ -107,23 +107,23 @@ export function loadImageFromPath(path) {
  * @returns {Promise<{ width: number, height: number, data: Uint8ClampedArray, count: number }>}
  */
 export async function loadBestMatchingDefaultImage(sourceBuffer, resolution) {
-  var paths = CONFIG.DEFAULT_IMAGE_PATHS;
-  var sourceHist = buildLuminanceHistogram(sourceBuffer);
+  const paths = CONFIG.DEFAULT_IMAGE_PATHS;
+  const sourceHist = buildLuminanceHistogram(sourceBuffer);
 
-  var loadPromises = paths.map(function(path) {
+  const loadPromises = paths.map(function(path) {
     return loadImageFromPath(path).then(function(img) {
-      var buf = createPixelBuffer(img, resolution);
+      const buf = createPixelBuffer(img, resolution);
       return { buffer: buf, histogram: buildLuminanceHistogram(buf) };
     }).catch(function() {
       return null;
     });
   });
 
-  var results = await Promise.all(loadPromises);
+  const results = await Promise.all(loadPromises);
 
-  var loaded = [];
-  var histograms = [];
-  for (var i = 0; i < results.length; i++) {
+  const loaded = [];
+  const histograms = [];
+  for (let i = 0; i < results.length; i++) {
     if (results[i] !== null) {
       loaded.push(results[i].buffer);
       histograms.push(results[i].histogram);
@@ -136,7 +136,7 @@ export async function loadBestMatchingDefaultImage(sourceBuffer, resolution) {
     return generateRandomTarget(resolution);
   }
 
-  var ranked = rankAndFilterDefaults(sourceHist, loaded, histograms);
+  const ranked = rankAndFilterDefaults(sourceHist, loaded, histograms);
 
   if (ranked.length === 0) {
     APP_STATE.rankedTargets = null;

@@ -1,17 +1,15 @@
 <progress>
-  <phase>Phase 19: HD Video Recording</phase>
+  <phase>Phase 20: Codebase Cleanup — Dead Code, Bugs, Performance</phase>
   <status>IN PROGRESS</status>
-  <last_completed_step>EXPLORE</last_completed_step>
-  <next_step>THINK HARD</next_step>
-  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/events.js, js/video/recorder.js, js/video/offline-render.js, js/video/render-phases.js, js/animation/engine.js, js/animation/buffer-phases.js, js/state-management.js, js/ui/options.js, index.html, css/styles.css</files_read_this_session>
+  <last_completed_step>THINK HARD</last_completed_step>
+  <next_step>WRITE VALIDATIONS FIRST</next_step>
+  <files_read_this_session>CLAUDE.md, progress.txt, js/config.js, js/state.js, js/main.js, js/utils.js, js/events.js, js/state-management.js, index.html, js/ui/screens.js, js/ui/toast.js, js/ui/noise.js, js/ui/options.js, js/image/pipeline.js, js/image/procedural.js, js/image/matching.js, js/algorithm/pixel-alchemy.js, js/algorithm/patterns.js, js/animation/engine.js, js/animation/buffer-phases.js, js/video/recorder.js, js/video/offline-render.js, js/video/render-phases.js, css/styles.css, js/validation/validations.js</files_read_this_session>
   <plan_summary>
-    Add an HD recording option that scales the offline video render canvas by a configurable multiplier (CONFIG.VIDEO_RENDER_SCALE, default 2).
-    The user toggles "HD Recording" via a checkbox on the setup screen. When enabled and the user clicks "Download Video",
-    the offline renderer creates its canvas at scale×size instead of 1×size. For 768px resolution, a warning toast is shown
-    about potential performance impact. The live animation is NOT affected — only the offline render in offline-render.js
-    and render-phases.js. Files to modify: config.js (VIDEO_RENDER_SCALE), state.js (hdRecording), index.html (checkbox),
-    events.js (wire checkbox), css/styles.css (style), offline-render.js (apply scale to canvas + pass to renderers),
-    render-phases.js (accept scale param, multiply coordinates), validation/validations.js (new validations).
+    Fix 11 issues found during codebase audit: (1) Remove dead startRecording/stopRecording from recorder.js,
+    (2) Add undeclared animBatchIndex/animSettled to state.js, (3) Fix DEFAULT_IMAGE_PATHS (remove missing img16, add img19/img20),
+    (4) Remove dead options.js, (5) Remove dead PROCEDURAL_TARGET_COUNT config, (6) Pre-allocate ImageData to avoid per-frame GC,
+    (7) Add #result-canvas CSS, (8) Add Escape key for modal, (9) Refactor loadImageFromFile return type,
+    (10) Standardize var to const/let. Each fix is an atomic commit.
   </plan_summary>
   <blockers>none</blockers>
 </progress>
