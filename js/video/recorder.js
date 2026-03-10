@@ -83,21 +83,38 @@ export function startRecording(canvas) {
     return;
   }
 
-  var mimeType = resolveVideoMimeType();
-  APP_STATE.resolvedVideoMime = mimeType;
-  APP_STATE.recordedChunks = [];
+  try {
+    var mimeType = resolveVideoMimeType();
+    APP_STATE.resolvedVideoMime = mimeType;
+    APP_STATE.recordedChunks = [];
 
-  var stream = canvas.captureStream(CONFIG.VIDEO_FRAMERATE);
-  var recorder = new MediaRecorder(stream, { mimeType: mimeType });
+    var stream = canvas.captureStream(CONFIG.VIDEO_FRAMERATE);
 
-  recorder.ondataavailable = function(e) {
-    if (e.data && e.data.size > 0) {
-      APP_STATE.recordedChunks.push(e.data);
+    // Polyfill requestFrame if missing — some browsers lack it on
+    // CanvasCaptureMediaStreamTrack, causing "track.requestFrame is not a function".
+    var track = stream.getVideoTracks()[0];
+    if (track && typeof track.requestFrame !== 'function') {
+      track.requestFrame = function() {};
     }
-  };
 
-  recorder.start();
-  APP_STATE.mediaRecorder = recorder;
+    var recorder = new MediaRecorder(stream, { mimeType: mimeType });
+
+    recorder.ondataavailable = function(e) {
+      if (e.data && e.data.size > 0) {
+        APP_STATE.recordedChunks.push(e.data);
+      }
+    };
+
+    recorder.onerror = function(e) {
+      console.warn('MediaRecorder error:', e.error || e);
+    };
+
+    recorder.start();
+    APP_STATE.mediaRecorder = recorder;
+  } catch (err) {
+    console.warn('Video recording failed to start:', err.message);
+    APP_STATE.mediaRecorder = null;
+  }
 }
 
 /**
