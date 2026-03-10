@@ -85,7 +85,7 @@ export const CONFIG = {
     'defaultImages/img5.jpg',
     'defaultImages/img6.jpg',
     'defaultImages/img7.jpg',
-    'defaultImages/img8.jpeg',
+    'defaultImages/img8.jpg',
     'defaultImages/img9.jpg',
     'defaultImages/img10.jpg',
     'defaultImages/img11.jpg',
@@ -93,8 +93,8 @@ export const CONFIG = {
     'defaultImages/img13.jpg',
     'defaultImages/img14.jpg',
     'defaultImages/img15.png',
-    'defaultImages/img16.png',
-    'defaultImages/img17.png',
-    'defaultImages/img18.png'
+    'defaultImages/img16.jpg',
+    'defaultImages/img17.jpg',
+    'defaultImages/img18.jpg'
   ]
 };
