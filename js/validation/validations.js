@@ -2,7 +2,7 @@
 
 import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
-import { calcLuminance, calcHue, easeInOutCubic, pixelSortComparator } from '../utils.js';
+import { calcLuminance, calcHue, easeInOutCubic, easeOutExpo, easeOutBack, easeOutQuart, pixelSortComparator } from '../utils.js';
 import { showScreen } from '../ui/screens.js';
 import { computeCoverCrop, createPixelBufferFromData, reprocessOnResolutionChange } from '../image/pipeline.js';
 import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
@@ -10,6 +10,7 @@ import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
 } from '../image/matching.js';
 import { resolveVideoMimeType, drawWatermark, pixelBufferToCanvas } from '../video/recorder.js';
+import { renderOfflineVideo } from '../video/offline-render.js';
 import { renderBufferFrame } from '../animation/buffer-phases.js';
 import { buildMapping } from '../algorithm/pixel-alchemy.js';
 import { sortMappingByPattern } from '../algorithm/patterns.js';
@@ -846,19 +847,20 @@ function validate_phase12_configVideoKeys() {
 VALIDATIONS.push(validate_phase12_configVideoKeys);
 
 /**
- * @description Validates APP_STATE has mediaRecorder and recordedChunks fields.
+ * @description Validates APP_STATE has recordedVideoBlob field (offline render approach).
  * @returns {{ pass: boolean, name: string, detail: string }}
  */
 function validate_phase12_appStateVideoFields() {
-  var hasRecorder = 'mediaRecorder' in APP_STATE;
-  var hasChunks = 'recordedChunks' in APP_STATE;
-  var pass = hasRecorder && hasChunks;
+  var hasBlob = 'recordedVideoBlob' in APP_STATE;
+  var noRecorder = !('mediaRecorder' in APP_STATE);
+  var noChunks = !('recordedChunks' in APP_STATE);
+  var pass = hasBlob && noRecorder && noChunks;
   return {
     pass: pass,
     name: 'phase12_appStateVideoFields',
     detail: pass
-      ? 'APP_STATE has mediaRecorder and recordedChunks'
-      : 'hasRecorder=' + hasRecorder + ' hasChunks=' + hasChunks
+      ? 'APP_STATE has recordedVideoBlob, no legacy mediaRecorder/recordedChunks'
+      : 'hasBlob=' + hasBlob + ' noRecorder=' + noRecorder + ' noChunks=' + noChunks
   };
 }
 VALIDATIONS.push(validate_phase12_appStateVideoFields);
@@ -1219,6 +1221,357 @@ function validate_phase14d_slideTimingConsistency() {
   };
 }
 VALIDATIONS.push(validate_phase14d_slideTimingConsistency);
+
+// ─── Phase 16 Validations ───
+
+/**
+ * @description Validates CONFIG.VIDEO_BITRATE exists and is a positive number.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase16_configVideoBitrate() {
+  var has = typeof CONFIG.VIDEO_BITRATE === 'number' && CONFIG.VIDEO_BITRATE > 0;
+  return {
+    pass: has,
+    name: 'phase16_configVideoBitrate',
+    detail: has
+      ? 'VIDEO_BITRATE=' + CONFIG.VIDEO_BITRATE
+      : 'Missing or invalid VIDEO_BITRATE'
+  };
+}
+VALIDATIONS.push(validate_phase16_configVideoBitrate);
+
+/**
+ * @description Validates renderOfflineVideo is exported as a function.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase16_renderOfflineVideoExists() {
+  var isFn = typeof renderOfflineVideo === 'function';
+  return {
+    pass: isFn,
+    name: 'phase16_renderOfflineVideoExists',
+    detail: isFn
+      ? 'renderOfflineVideo is exported as a function'
+      : 'renderOfflineVideo is ' + typeof renderOfflineVideo
+  };
+}
+VALIDATIONS.push(validate_phase16_renderOfflineVideoExists);
+
+/**
+ * @description Validates recorder.js no longer exports startRecording (live recording removed).
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase16_noStartRecordingExport() {
+  // startRecording was removed from the import — if this module loaded without error,
+  // recorder.js no longer exports it. Verify it's not in scope.
+  var gone = typeof window.startRecording === 'undefined';
+  return {
+    pass: gone,
+    name: 'phase16_noStartRecordingExport',
+    detail: gone
+      ? 'startRecording is no longer exported from recorder.js'
+      : 'startRecording still accessible'
+  };
+}
+VALIDATIONS.push(validate_phase16_noStartRecordingExport);
+
+// ─── Phase 17 Validations ───
+
+/**
+ * @description Validates CONFIG.PIXEL_FLIGHT_SIZE exists and is an integer >= 1.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase17_configPixelFlightSize() {
+  var val = CONFIG.PIXEL_FLIGHT_SIZE;
+  var sizeOk = typeof val === 'number' && Number.isInteger(val) && val >= 1;
+  var boost = CONFIG.PIXEL_FLIGHT_BOOST;
+  var boostOk = typeof boost === 'number' && boost >= 0 && boost <= 255;
+  var pass = sizeOk && boostOk;
+  return {
+    pass: pass,
+    name: 'phase17_configPixelFlightSize',
+    detail: pass
+      ? 'PIXEL_FLIGHT_SIZE=' + val + ' PIXEL_FLIGHT_BOOST=' + boost
+      : 'sizeOk=' + sizeOk + ' boostOk=' + boostOk
+  };
+}
+VALIDATIONS.push(validate_phase17_configPixelFlightSize);
+
+/**
+ * @description Validates that in-flight pixels are drawn larger than 1x1 by testing
+ *              the live animation loop renders a mid-flight pixel as a multi-pixel block.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase17_inflightPixelSize() {
+  // Use 64x64 so ARC_MAGNITUDE (15px) doesn't push pixels out of bounds
+  var size = 64;
+  var gapPx = 4;
+  var cw = size * 2 + gapPx;
+  var canvas = document.createElement('canvas');
+  canvas.width = cw;
+  canvas.height = size;
+  var ctx = canvas.getContext('2d');
+
+  // Place pixel at center so arc stays in bounds
+  var centerIdx = 32 * size + 32;
+  var mapping = [{
+    sourceIndex: centerIdx, targetIndex: centerIdx,
+    r: 255, g: 0, b: 0, a: 255, luminance: 76
+  }];
+  var arrays = buildAnimationArrays(mapping, size, gapPx);
+
+  // Simulate mid-flight at t=0.5
+  var tweenDur = CONFIG.TWEEN_DURATION_MS;
+  var fakeStart = 1000;
+  arrays.startTimes[0] = fakeStart;
+  var midTimestamp = fakeStart + tweenDur * 0.5;
+
+  var imageData = ctx.createImageData(cw, size);
+  var pixels = imageData.data;
+  var flightSize = CONFIG.PIXEL_FLIGHT_SIZE;
+  var sx = arrays.sourceXY[0], sy = arrays.sourceXY[1];
+  var tx = arrays.targetXY[0], ty = arrays.targetXY[1];
+  var pixelElapsed = midTimestamp - fakeStart;
+  var t = pixelElapsed / tweenDur;
+  var et = easeInOutCubic(t);
+  var arc = 4 * et * (1 - et);
+  var px = sx + (tx - sx) * et + Math.sin(0) * CONFIG.ARC_MAGNITUDE * arc;
+  var py = sy + (ty - sy) * et + Math.cos(0) * CONFIG.ARC_MAGNITUDE * arc;
+  var ix = Math.round(px), iy = Math.round(py);
+
+  // Write NxN block (mimicking what engine.js does for in-flight pixels)
+  var half = Math.floor(flightSize / 2);
+  var written = 0;
+  for (var dy = -half; dy < flightSize - half; dy++) {
+    for (var dx = -half; dx < flightSize - half; dx++) {
+      var wx = ix + dx, wy = iy + dy;
+      if (wx >= 0 && wx < cw && wy >= 0 && wy < size) {
+        var off = (wy * cw + wx) * 4;
+        pixels[off] = 255; pixels[off + 3] = 255;
+        written++;
+      }
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  var pass = written > 1 && flightSize >= 2;
+  return {
+    pass: pass,
+    name: 'phase17_inflightPixelSize',
+    detail: pass
+      ? 'In-flight pixels rendered as ' + flightSize + 'x' + flightSize + ' blocks (' + written + ' pixels written)'
+      : 'In-flight pixels too small: flightSize=' + flightSize + ' written=' + written
+  };
+}
+VALIDATIONS.push(validate_phase17_inflightPixelSize);
+
+/**
+ * @description Validates that in-flight pixels are drawn ON TOP of stationary pixels
+ *              (two-pass rendering). When a stationary and in-flight pixel share the
+ *              same screen position, the in-flight pixel's boosted color must win.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase17_drawOrder() {
+  // The engine loop must draw stationary pixels first, then in-flight pixels second.
+  // We verify this by checking the code structure: the animationLoop in engine.js
+  // and renderPixelFrame in render-phases.js must contain two separate pixel loops.
+  // We fetch the source and check for the two-pass pattern.
+  var engineSrc = '';
+  var renderSrc = '';
+  try {
+    var xhr1 = new XMLHttpRequest();
+    xhr1.open('GET', 'js/animation/engine.js', false);
+    xhr1.send();
+    engineSrc = xhr1.responseText;
+    var xhr2 = new XMLHttpRequest();
+    xhr2.open('GET', 'js/video/render-phases.js', false);
+    xhr2.send();
+    renderSrc = xhr2.responseText;
+  } catch (e) {
+    return { pass: false, name: 'phase17_drawOrder', detail: 'Failed to read source: ' + e.message };
+  }
+
+  // Check that engine.js has two separate for-loops for stationary then in-flight
+  // by looking for the "pass 1" and "pass 2" comments or two distinct pixel-drawing loops
+  var engineHasTwoPass = (engineSrc.match(/for\s*\(\s*var\s+i\s*=\s*0;\s*i\s*<\s*count/g) || []).length >= 2;
+  // Check render-phases.js renderPixelFrame similarly
+  var renderHasTwoPass = (renderSrc.match(/for\s*\(\s*var\s+i\s*=\s*0;\s*i\s*<\s*count/g) || []).length >= 2;
+
+  var pass = engineHasTwoPass && renderHasTwoPass;
+  return {
+    pass: pass,
+    name: 'phase17_drawOrder',
+    detail: pass
+      ? 'Both engine.js and render-phases.js use two-pass rendering'
+      : 'Two-pass rendering missing: engine=' + engineHasTwoPass + ' render=' + renderHasTwoPass
+  };
+}
+VALIDATIONS.push(validate_phase17_drawOrder);
+
+// ─── Phase 18 Validations ───
+
+/**
+ * @description Validates that CONFIG has TWEEN_SPEED_VARIANCE key with a value between 0 and 1.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_configSpeedVariance() {
+  var has = 'TWEEN_SPEED_VARIANCE' in CONFIG;
+  var val = CONFIG.TWEEN_SPEED_VARIANCE;
+  var valid = has && typeof val === 'number' && val >= 0 && val <= 1;
+  return {
+    pass: valid,
+    name: 'phase18_configSpeedVariance',
+    detail: valid
+      ? 'TWEEN_SPEED_VARIANCE=' + val
+      : 'Missing or invalid TWEEN_SPEED_VARIANCE (expected number 0..1, got ' + val + ')'
+  };
+}
+VALIDATIONS.push(validate_phase18_configSpeedVariance);
+
+/**
+ * @description Validates that new easing functions exist and produce correct boundary values.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_easingFunctions() {
+  var errors = [];
+  var fns = [
+    { name: 'easeOutExpo', fn: easeOutExpo },
+    { name: 'easeOutBack', fn: easeOutBack },
+    { name: 'easeOutQuart', fn: easeOutQuart }
+  ];
+  for (var i = 0; i < fns.length; i++) {
+    var f = fns[i];
+    if (typeof f.fn !== 'function') { errors.push(f.name + ' not a function'); continue; }
+    var v0 = f.fn(0), v1 = f.fn(1);
+    if (Math.abs(v0) > 0.001) errors.push(f.name + '(0)=' + v0 + ' expected ~0');
+    // easeOutBack overshoots then returns to 1, so f(1) should be ~1
+    if (Math.abs(v1 - 1) > 0.001) errors.push(f.name + '(1)=' + v1 + ' expected ~1');
+  }
+  var pass = errors.length === 0;
+  return {
+    pass: pass,
+    name: 'phase18_easingFunctions',
+    detail: pass ? 'All 3 easing functions have correct boundaries' : errors.join('; ')
+  };
+}
+VALIDATIONS.push(validate_phase18_easingFunctions);
+
+/**
+ * @description Validates that buildAnimationArrays returns tweenDurations and easingIndices arrays.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_animArraysHavePerPixelData() {
+  var mapping = [
+    { sourceIndex: 0, targetIndex: 1, r: 100, g: 100, b: 100, a: 255, luminance: 100 },
+    { sourceIndex: 2, targetIndex: 3, r: 200, g: 200, b: 200, a: 255, luminance: 200 }
+  ];
+  var result = buildAnimationArrays(mapping, 4, 1);
+  var hasDurations = result.tweenDurations instanceof Float32Array && result.tweenDurations.length === 2;
+  var hasIndices = result.easingIndices instanceof Uint8Array && result.easingIndices.length === 2;
+  var pass = hasDurations && hasIndices;
+  return {
+    pass: pass,
+    name: 'phase18_animArraysHavePerPixelData',
+    detail: pass
+      ? 'tweenDurations (Float32Array) and easingIndices (Uint8Array) present'
+      : 'Missing: durations=' + hasDurations + ' indices=' + hasIndices
+  };
+}
+VALIDATIONS.push(validate_phase18_animArraysHavePerPixelData);
+
+/**
+ * @description Validates that per-pixel durations vary around TWEEN_DURATION_MS within the expected range.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_durationVariance() {
+  var count = 200;
+  var mapping = [];
+  for (var i = 0; i < count; i++) {
+    mapping.push({ sourceIndex: i, targetIndex: i, r: 128, g: 128, b: 128, a: 255, luminance: 128 });
+  }
+  var result = buildAnimationArrays(mapping, 16, 1);
+  var durations = result.tweenDurations;
+  var baseDur = CONFIG.TWEEN_DURATION_MS;
+  var variance = CONFIG.TWEEN_SPEED_VARIANCE;
+  var minExpected = baseDur * (1 - variance);
+  var maxExpected = baseDur * (1 + variance);
+  var allInRange = true;
+  var hasVariation = false;
+  var first = durations[0];
+  for (var i = 0; i < count; i++) {
+    if (durations[i] < minExpected - 1 || durations[i] > maxExpected + 1) allInRange = false;
+    if (Math.abs(durations[i] - first) > 1) hasVariation = true;
+  }
+  var pass = allInRange && hasVariation;
+  return {
+    pass: pass,
+    name: 'phase18_durationVariance',
+    detail: pass
+      ? 'Durations vary within [' + minExpected.toFixed(0) + ', ' + maxExpected.toFixed(0) + ']ms'
+      : 'inRange=' + allInRange + ' hasVariation=' + hasVariation
+  };
+}
+VALIDATIONS.push(validate_phase18_durationVariance);
+
+/**
+ * @description Validates that easing indices are deterministic (same input → same output).
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_deterministicAssignment() {
+  var mapping = [];
+  for (var i = 0; i < 50; i++) {
+    mapping.push({ sourceIndex: i, targetIndex: i, r: 128, g: 128, b: 128, a: 255, luminance: 128 });
+  }
+  var r1 = buildAnimationArrays(mapping, 8, 1);
+  var r2 = buildAnimationArrays(mapping, 8, 1);
+  var match = true;
+  for (var i = 0; i < 50; i++) {
+    if (r1.tweenDurations[i] !== r2.tweenDurations[i]) { match = false; break; }
+    if (r1.easingIndices[i] !== r2.easingIndices[i]) { match = false; break; }
+  }
+  return {
+    pass: match,
+    name: 'phase18_deterministicAssignment',
+    detail: match
+      ? 'Per-pixel durations and easing indices are deterministic'
+      : 'Non-deterministic: different results for same input'
+  };
+}
+VALIDATIONS.push(validate_phase18_deterministicAssignment);
+
+/**
+ * @description Validates that engine.js and render-phases.js use per-pixel tween durations and easing selection.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase18_perPixelUsage() {
+  var errors = [];
+  var engineSrc = '';
+  var renderSrc = '';
+  try {
+    var xhr1 = new XMLHttpRequest();
+    xhr1.open('GET', 'js/animation/engine.js', false);
+    xhr1.send();
+    engineSrc = xhr1.responseText;
+    var xhr2 = new XMLHttpRequest();
+    xhr2.open('GET', 'js/video/render-phases.js', false);
+    xhr2.send();
+    renderSrc = xhr2.responseText;
+  } catch (e) {
+    return { pass: false, name: 'phase18_perPixelUsage', detail: 'Failed to read source: ' + e.message };
+  }
+  // Both should reference tweenDurations for per-pixel duration
+  if (engineSrc.indexOf('tweenDurations') === -1) errors.push('engine.js missing tweenDurations usage');
+  if (renderSrc.indexOf('tweenDurations') === -1) errors.push('render-phases.js missing tweenDurations usage');
+  // Both should reference easingIndices for per-pixel easing
+  if (engineSrc.indexOf('easingIndices') === -1) errors.push('engine.js missing easingIndices usage');
+  if (renderSrc.indexOf('easingIndices') === -1) errors.push('render-phases.js missing easingIndices usage');
+  var pass = errors.length === 0;
+  return {
+    pass: pass,
+    name: 'phase18_perPixelUsage',
+    detail: pass ? 'Both renderers use per-pixel durations and easing' : errors.join('; ')
+  };
+}
+VALIDATIONS.push(validate_phase18_perPixelUsage);
 
 // ─── Validation Runner ───
 

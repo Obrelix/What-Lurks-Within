@@ -5,6 +5,7 @@ import { APP_STATE } from './state.js';
 import { showScreen } from './ui/screens.js';
 import { showToast } from './ui/toast.js';
 import { startReveal } from './animation/engine.js';
+import { renderOfflineVideo } from './video/offline-render.js';
 
 // ═══════════════════════════════════════════
 // STATE MANAGEMENT
@@ -34,6 +35,8 @@ export function resetState() {
   APP_STATE.targetXY = null;
   APP_STATE.colors = null;
   APP_STATE.startTimes = null;
+  APP_STATE.tweenDurations = null;
+  APP_STATE.easingIndices = null;
   APP_STATE.animImageSize = null;
   APP_STATE.animGapPx = null;
   APP_STATE.pixelsPerMs = 0;
@@ -43,11 +46,7 @@ export function resetState() {
   APP_STATE.rankedTargets = null;
   APP_STATE.rankedTargetIndex = 0;
 
-  if (APP_STATE.mediaRecorder && APP_STATE.mediaRecorder.state !== 'inactive') {
-    APP_STATE.mediaRecorder.stop();
-  }
-  APP_STATE.mediaRecorder = null;
-  APP_STATE.recordedChunks = [];
+  APP_STATE.recordedVideoBlob = null;
   APP_STATE.resolvedVideoMime = null;
   APP_STATE.animPhase = null;
   APP_STATE.animPhaseStart = null;
@@ -94,28 +93,49 @@ export function downloadResult() {
 }
 
 /**
- * @description Downloads the recorded animation as a video file (MP4 or WebM).
+ * @description Renders the animation offline then downloads as a video file.
  */
 export function downloadVideo() {
-  if (!APP_STATE.recordedChunks || APP_STATE.recordedChunks.length === 0) {
-    showToast('No video recorded yet.', 'error');
+  if (!APP_STATE.mapping || !APP_STATE.sourceImageCanvas || !APP_STATE.targetImageCanvas) {
+    showToast('No animation data available.', 'error');
     return;
   }
-  try {
-    var mime = APP_STATE.resolvedVideoMime || 'video/webm';
-    var ext = mime.startsWith('video/mp4') ? '.mp4' : '.webm';
-    var blob = new Blob(APP_STATE.recordedChunks, { type: mime });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = 'what-lurks-within-' + Date.now() + ext;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch (err) {
-    showToast('Video download failed: ' + err.message, 'error');
+
+  if (APP_STATE.recordedVideoBlob) {
+    triggerVideoDownload(APP_STATE.recordedVideoBlob, APP_STATE.resolvedVideoMime);
+    return;
   }
+
+  var btn = document.getElementById('btn-download-video');
+  if (btn) { btn.disabled = true; btn.textContent = 'Rendering 0%...'; }
+
+  renderOfflineVideo(function(pct) {
+    if (btn) btn.textContent = 'Rendering ' + pct + '%...';
+  }).then(function(blob) {
+    APP_STATE.recordedVideoBlob = blob;
+    if (btn) { btn.disabled = false; btn.textContent = 'Download Video'; }
+    triggerVideoDownload(blob, APP_STATE.resolvedVideoMime);
+  }).catch(function(err) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Download Video'; }
+    showToast('Video render failed: ' + err.message, 'error');
+  });
+}
+
+/**
+ * @description Triggers browser download of a video blob.
+ * @param {Blob} blob - The video blob
+ * @param {string} mime - MIME type
+ */
+function triggerVideoDownload(blob, mime) {
+  var ext = (mime && mime.startsWith('video/mp4')) ? '.mp4' : '.webm';
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'what-lurks-within-' + Date.now() + ext;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /**
@@ -130,6 +150,7 @@ export function tryAgain() {
 
   var videoBtn = document.getElementById('btn-download-video');
   if (videoBtn) videoBtn.disabled = true;
+  APP_STATE.recordedVideoBlob = null;
 
   if (APP_STATE.targetMode === 'fate' && APP_STATE.rankedTargets && APP_STATE.rankedTargets.length > 0) {
     APP_STATE.rankedTargetIndex = (APP_STATE.rankedTargetIndex + 1) % APP_STATE.rankedTargets.length;

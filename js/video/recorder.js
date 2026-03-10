@@ -1,8 +1,6 @@
 'use strict';
 
 import { CONFIG } from '../config.js';
-import { APP_STATE } from '../state.js';
-import { showToast } from '../ui/toast.js';
 
 // ═══════════════════════════════════════════
 // VIDEO RECORDER (MediaRecorder + captureStream)
@@ -62,9 +60,12 @@ export function pixelBufferToCanvas(pixelBuffer) {
   var canvas = document.createElement('canvas');
   canvas.width = pixelBuffer.width;
   canvas.height = pixelBuffer.height;
-  var ctx = canvas.getContext('2d');
-  var imageData = ctx.createImageData(pixelBuffer.width, pixelBuffer.height);
-  imageData.data.set(pixelBuffer.data);
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  var imageData = new ImageData(
+    new Uint8ClampedArray(pixelBuffer.data),
+    pixelBuffer.width,
+    pixelBuffer.height
+  );
   ctx.putImageData(imageData, 0, 0);
   return canvas;
 }

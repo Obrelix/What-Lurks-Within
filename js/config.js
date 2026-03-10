@@ -30,7 +30,10 @@ export const CONFIG = {
 
   // Animation
   TWEEN_DURATION_MS: 1500,
+  TWEEN_SPEED_VARIANCE: 0.4,
   ARC_MAGNITUDE: 15,
+  PIXEL_FLIGHT_SIZE: 1,
+  PIXEL_FLIGHT_BOOST: 20,
   COMPLETION_DELAY_MS: 500,
   TARGET_DURATION_S: 18,
 
@@ -54,7 +57,8 @@ export const CONFIG = {
   HISTOGRAM_MIN_SCORE: 0.3,
   HISTOGRAM_BINS: 32,
   // Video recording
-  VIDEO_FRAMERATE: 30,
+  VIDEO_FRAMERATE: 60,
+  VIDEO_BITRATE: 12000000,
   VIDEO_MIME_PRIORITY: [
     'video/mp4;codecs=avc1.42E01E',
     'video/webm;codecs=vp9',
@@ -64,7 +68,7 @@ export const CONFIG = {
   // Video buffers
   VIDEO_BUFFER_OPEN_MS: 600,
   VIDEO_BUFFER_CLOSE_MS: 1000,
-  VIDEO_BUFFER_SLIDE_MS: 600,
+  VIDEO_BUFFER_SLIDE_MS: 500,
 
   // Watermark
   WATERMARK_TEXT: 'What Lurks Within',
@@ -87,6 +91,9 @@ export const CONFIG = {
     'defaultImages/img12.jpg',
     'defaultImages/img13.jpg',
     'defaultImages/img14.jpg',
-    'defaultImages/img15.png'
+    'defaultImages/img15.png',
+    'defaultImages/img16.png',
+    'defaultImages/img17.png',
+    'defaultImages/img18.png'
   ]
 };

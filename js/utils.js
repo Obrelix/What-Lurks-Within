@@ -60,6 +60,41 @@ export function easeInOutCubic(t) {
 }
 
 /**
+ * @description Easing function: ease-out exponential (fast start, slow end).
+ * @param {number} t - Progress (0 to 1)
+ * @returns {number} Eased value (0 to 1)
+ */
+export function easeOutExpo(t) {
+  return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+}
+
+/**
+ * @description Easing function: ease-out back (slight overshoot then settle).
+ * @param {number} t - Progress (0 to 1)
+ * @returns {number} Eased value (0 to 1)
+ */
+export function easeOutBack(t) {
+  var c1 = 1.70158;
+  var c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+/**
+ * @description Easing function: ease-out quartic (smooth deceleration).
+ * @param {number} t - Progress (0 to 1)
+ * @returns {number} Eased value (0 to 1)
+ */
+export function easeOutQuart(t) {
+  return 1 - Math.pow(1 - t, 4);
+}
+
+/**
+ * @description Array of all easing functions used for per-pixel animation.
+ * @type {Array<function(number): number>}
+ */
+export const EASING_FUNCTIONS = [easeInOutCubic, easeOutExpo, easeOutBack, easeOutQuart];
+
+/**
  * @description Fisher-Yates shuffle of an array (in-place).
  * @param {Array} arr
  * @returns {Array} The same array, shuffled
