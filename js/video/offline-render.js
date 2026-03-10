@@ -87,8 +87,17 @@ export function renderOfflineVideo(onProgress) {
 
   var mimeType = resolveVideoMimeType();
   APP_STATE.resolvedVideoMime = mimeType;
+
+  // Prefer captureStream(0) + requestFrame() for precise frame control.
+  // Fall back to auto-capture if requestFrame is not supported.
   var stream = canvas.captureStream(0);
   var track = stream.getVideoTracks()[0];
+  var hasRequestFrame = track && typeof track.requestFrame === 'function';
+  if (!hasRequestFrame) {
+    stream = canvas.captureStream(CONFIG.VIDEO_FRAMERATE);
+    track = stream.getVideoTracks()[0];
+  }
+
   var recorder = new MediaRecorder(stream, {
     mimeType: mimeType,
     videoBitsPerSecond: CONFIG.VIDEO_BITRATE
@@ -123,7 +132,7 @@ export function renderOfflineVideo(onProgress) {
     function renderNext() {
       if (frame >= totalFrames) { recorder.stop(); return; }
       renderFrameAtTime(ctx, cw, size, gapPx, frame * frameMs, bounds, departures);
-      track.requestFrame();
+      if (hasRequestFrame) track.requestFrame();
       frame++;
       if (onProgress) onProgress(Math.round((frame / totalFrames) * 100));
       setTimeout(renderNext, frameMs);
