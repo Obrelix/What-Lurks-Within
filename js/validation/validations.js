@@ -4,7 +4,7 @@ import { CONFIG } from '../config.js';
 import { APP_STATE } from '../state.js';
 import { calcLuminance, calcHue, easeInOutCubic, easeOutExpo, easeOutBack, easeOutQuart, pixelSortComparator } from '../utils.js';
 import { showScreen } from '../ui/screens.js';
-import { computeCoverCrop, createPixelBufferFromData, reprocessOnResolutionChange } from '../image/pipeline.js';
+import { computeCoverCrop, createPixelBufferFromData, loadImageFromFile, reprocessOnResolutionChange } from '../image/pipeline.js';
 import { PROCEDURAL_GENERATORS } from '../image/procedural.js';
 import {
   buildLuminanceHistogram, histogramIntersection, findBestMatchIndex, rankAndFilterDefaults
@@ -109,7 +109,7 @@ function validate_phase5_configComplete() {
     'TWEEN_DURATION_MS', 'TARGET_DURATION_S',
     'ARC_MAGNITUDE', 'COMPLETION_DELAY_MS',
     'LUMINANCE_BAND_WIDTH',
-    'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS', 'PROCEDURAL_TARGET_COUNT',
+    'MAX_FILE_SIZE_BYTES', 'TOAST_DURATION_MS',
     'CANVAS_GAP_RATIO', 'MAX_INFLIGHT',
     'HISTOGRAM_MIN_SCORE', 'HISTOGRAM_BINS', 'DEFAULT_IMAGE_PATHS'
   ];
@@ -1675,6 +1675,113 @@ function validate_phase19_renderPhasesScale() {
   };
 }
 VALIDATIONS.push(validate_phase19_renderPhasesScale);
+
+// ─── Phase 20 Validations ───
+
+/**
+ * @description Validates animBatchIndex and animSettled are declared in APP_STATE.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase20_stateDeclaresAnimBatchFields() {
+  var hasBatch = 'animBatchIndex' in APP_STATE;
+  var hasSettled = 'animSettled' in APP_STATE;
+  var pass = hasBatch && hasSettled;
+  return {
+    pass: pass,
+    name: 'phase20_stateDeclaresAnimBatchFields',
+    detail: pass
+      ? 'animBatchIndex and animSettled declared in APP_STATE'
+      : 'missing: ' + (!hasBatch ? 'animBatchIndex ' : '') + (!hasSettled ? 'animSettled' : '')
+  };
+}
+VALIDATIONS.push(validate_phase20_stateDeclaresAnimBatchFields);
+
+/**
+ * @description Validates DEFAULT_IMAGE_PATHS references only files that exist (no img16).
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase20_noMissingDefaultImages() {
+  var paths = CONFIG.DEFAULT_IMAGE_PATHS;
+  var hasImg16 = paths.indexOf('defaultImages/img16.jpg') !== -1;
+  var hasImg19 = paths.indexOf('defaultImages/img19.jpg') !== -1;
+  var hasImg20 = paths.indexOf('defaultImages/img20.jpg') !== -1;
+  var pass = !hasImg16 && hasImg19 && hasImg20;
+  return {
+    pass: pass,
+    name: 'phase20_noMissingDefaultImages',
+    detail: pass
+      ? 'DEFAULT_IMAGE_PATHS has no missing files and includes img19/img20'
+      : 'hasImg16=' + hasImg16 + ' hasImg19=' + hasImg19 + ' hasImg20=' + hasImg20
+  };
+}
+VALIDATIONS.push(validate_phase20_noMissingDefaultImages);
+
+/**
+ * @description Validates PROCEDURAL_TARGET_COUNT is removed from CONFIG.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase20_noProcTargetCount() {
+  var gone = !('PROCEDURAL_TARGET_COUNT' in CONFIG);
+  return {
+    pass: gone,
+    name: 'phase20_noProcTargetCount',
+    detail: gone
+      ? 'PROCEDURAL_TARGET_COUNT removed from CONFIG'
+      : 'PROCEDURAL_TARGET_COUNT still in CONFIG'
+  };
+}
+VALIDATIONS.push(validate_phase20_noProcTargetCount);
+
+/**
+ * @description Validates result-canvas has pixelated image rendering CSS.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase20_resultCanvasCSS() {
+  var canvas = document.getElementById('result-canvas');
+  if (!canvas) return { pass: false, name: 'phase20_resultCanvasCSS', detail: 'result-canvas not found' };
+  var style = getComputedStyle(canvas).imageRendering;
+  var pass = style === 'pixelated' || style === 'crisp-edges' || style === '-webkit-optimize-contrast';
+  return {
+    pass: pass,
+    name: 'phase20_resultCanvasCSS',
+    detail: pass
+      ? 'result-canvas has pixelated rendering: ' + style
+      : 'image-rendering=' + style
+  };
+}
+VALIDATIONS.push(validate_phase20_resultCanvasCSS);
+
+/**
+ * @description Validates APP_STATE declares animImageData for pre-allocated ImageData.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase20_preAllocatedImageData() {
+  var pass = 'animImageData' in APP_STATE;
+  return {
+    pass: pass,
+    name: 'phase20_preAllocatedImageData',
+    detail: pass
+      ? 'animImageData declared in APP_STATE'
+      : 'animImageData missing from APP_STATE'
+  };
+}
+VALIDATIONS.push(validate_phase20_preAllocatedImageData);
+
+/**
+ * @description Validates loadImageFromFile returns object with img and objectURL properties.
+ * @returns {{ pass: boolean, name: string, detail: string }}
+ */
+function validate_phase20_loadImageFromFileSignature() {
+  var pass = typeof loadImageFromFile === 'function';
+  return {
+    pass: pass,
+    name: 'phase20_loadImageFromFileSignature',
+    detail: pass
+      ? 'loadImageFromFile is exported and callable'
+      : 'loadImageFromFile not found'
+  };
+}
+VALIDATIONS.push(validate_phase20_loadImageFromFileSignature);
 
 // ─── Validation Runner ───
 
